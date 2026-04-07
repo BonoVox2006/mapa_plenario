@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mapa de Plenário — Alocação de Deputados</title>
+    <link rel="stylesheet" href="./styles.css?v=9" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar__left">
+        <div class="brand">
+          <div class="brand__kicker">Coordenação de Comissões Temporárias</div>
+          <div class="brand__title">Mapa de Plenário</div>
+        </div>
+      </div>
+      <div class="topbar__center">
+        <div id="currentPlenarioText" class="topbar__plenario">Você está no Plenário 1</div>
+      </div>
+      <div class="topbar__right">
+        <button id="btnImportDeputies" class="btn btn--ghost" type="button">Importar deputados (PDF)</button>
+        <button id="btnSyncDeputies" class="btn btn--ghost" type="button">Atualizar do site</button>
+        <button id="btnClear" class="btn btn--danger" type="button">Limpar mapa</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel">
+        <section class="card">
+          <div class="card__title">Comissões</div>
+          <div class="stack">
+            <label class="field">
+              <div class="field__label">Tipo de comissão</div>
+              <select id="commissionType" class="input">
+                <option value="permanente">Comissões Permanentes</option>
+                <option value="temporaria">Comissões Temporárias</option>
+              </select>
+            </label>
+            <label class="field">
+              <div class="field__label">Comissão</div>
+              <select id="commissionSelect" class="input">
+                <option value="">Carregando comissões...</option>
+              </select>
+            </label>
+            <label class="field">
+              <div class="field__label" style="font-size:14px; color:var(--text); font-weight:800; margin-bottom:4px">Deputados</div>
+              <div class="field__label">Buscar</div>
+              <input id="deputySearch" class="input" placeholder="Nome, partido, UF..." autocomplete="off" />
+            </label>
+
+            <div class="selected">
+              <div class="selected__label">Selecionado</div>
+              <div id="selectedDeputy" class="selected__content" aria-live="polite"></div>
+              <div class="hint">
+                Dica: selecione um deputado e depois clique em uma cadeira para alocar.
+              </div>
+            </div>
+
+            <div id="deputyList" class="list" role="listbox" aria-label="Lista de deputados"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card__title">Cadeira</div>
+          <div id="seatInspector" class="inspector">
+            <div class="inspector__empty">Clique em uma cadeira para ver/editar.</div>
+          </div>
+        </section>
+      </aside>
+
+      <section class="stage">
+        <div class="stage__meta">
+          <div class="pill" id="layoutTabs">
+            <span class="pill__label">Plenário:</span>
+            <button type="button" data-layout="1" class="pillTab pillTab--active">1</button>
+            <button type="button" data-layout="2" class="pillTab">2</button>
+            <button type="button" data-layout="3" class="pillTab">3</button>
+            <button type="button" data-layout="4" class="pillTab">4</button>
+            <button type="button" data-layout="5" class="pillTab">5</button>
+            <button type="button" data-layout="6" class="pillTab">6</button>
+            <button type="button" data-layout="7" class="pillTab">7</button>
+            <button type="button" data-layout="8" class="pillTab">8</button>
+            <button type="button" data-layout="9" class="pillTab">9</button>
+            <button type="button" data-layout="10" class="pillTab">10</button>
+            <button type="button" data-layout="11" class="pillTab">11</button>
+            <button type="button" data-layout="12" class="pillTab">12</button>
+            <button type="button" data-layout="13" class="pillTab">13</button>
+            <button type="button" data-layout="14" class="pillTab">14</button>
+            <button type="button" data-layout="15" class="pillTab">15</button>
+            <button type="button" data-layout="16" class="pillTab">16</button>
+          </div>
+          <div class="stage__metaCenter">
+            <button id="btnFindDeputy" class="btn btn--ghost" type="button">Procura Deputado</button>
+          </div>
+          <div class="pill pill--muted" id="statusText"></div>
+        </div>
+        <div id="seatGrid" class="grid" aria-label="Mapa de cadeiras"></div>
+        <div id="presidentArea" class="presidentArea" aria-hidden="true"></div>
+      </section>
+    </main>
+
+    <dialog id="seatDialog" class="dialog">
+      <form method="dialog" class="dialog__body">
+        <div class="dialog__title">Alocar deputado</div>
+        <div id="dialogSeatLabel" class="dialog__subtitle"></div>
+
+        <div class="dialog__row">
+          <button id="btnAssignSelected" class="btn btn--primary" type="button">
+            Alocar selecionado
+          </button>
+          <button id="btnRemoveFromSeat" class="btn btn--ghost" type="button">
+            Remover desta cadeira
+          </button>
+        </div>
+
+        <div class="dialog__row dialog__row--end">
+          <button class="btn" value="cancel">Fechar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="deputiesDialog" class="dialog">
+      <form method="dialog" class="dialog__body">
+        <div class="dialog__title">Importar deputados do PDF</div>
+        <div class="dialog__subtitle">
+          Abra o PDF, selecione tudo, copie e cole abaixo. O sistema extrai Nome + Partido + UF + e-mail.
+        </div>
+
+        <label class="field" style="margin-top:14px">
+          <div class="field__label">Texto copiado do PDF</div>
+          <textarea id="deputiesPaste" class="textarea" rows="10" placeholder="Cole aqui..."></textarea>
+        </label>
+
+        <div class="dialog__row" style="align-items:center; justify-content:space-between">
+          <div id="deputiesPreview" class="hint" style="margin:0">Nenhum texto colado ainda.</div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end">
+            <button id="btnDeputiesClear" class="btn btn--ghost" type="button">Voltar ao exemplo</button>
+            <button id="btnDeputiesApply" class="btn btn--primary" type="button">Aplicar lista</button>
+          </div>
+        </div>
+
+        <div class="dialog__row dialog__row--end">
+          <button class="btn" value="cancel">Fechar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="findDeputyDialog" class="dialog">
+      <form method="dialog" class="dialog__body">
+        <div class="dialog__title">Procura Deputado</div>
+        <div class="dialog__subtitle">Selecione um deputado na lista abaixo (com busca por nome).</div>
+
+        <label class="field" style="margin-top:14px">
+          <div class="field__label">Buscar deputado</div>
+          <input
+            id="findDeputySearch"
+            class="input"
+            type="text"
+            placeholder="Digite o nome do deputado..."
+            autocomplete="off"
+          />
+        </label>
+
+        <div id="findDeputyList" class="list" role="listbox" aria-label="Lista para procura de deputado"></div>
+        <div id="findDeputyResult" class="findResult">Selecione um deputado para localizar nos plenários.</div>
+
+        <div class="dialog__row dialog__row--end">
+          <button class="btn" value="cancel">Fechar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="./data-deputados.js?v=1"></script>
+    <script src="./app.js?v=33"></script>
+  </body>
+</html>
