@@ -1,0 +1,33 @@
+// Generated data entrypoint (offline-friendly).
+// Replace with your real deputies list. Photos can be URLs or local files (e.g. "./fotos/fulano.jpg").
+window.PLENARIO_DEPUTADOS = [
+  {
+    "id": "dep-1",
+    "nome": "Deputado Exemplo 1",
+    "partido": "ABC",
+    "uf": "DF",
+    "foto": "https://via.placeholder.com/160x200.png?text=Foto+1"
+  },
+  {
+    "id": "dep-2",
+    "nome": "Deputada Exemplo 2",
+    "partido": "XYZ",
+    "uf": "SP",
+    "foto": "https://via.placeholder.com/160x200.png?text=Foto+2"
+  },
+  {
+    "id": "dep-3",
+    "nome": "Deputado Exemplo 3",
+    "partido": "QWE",
+    "uf": "RJ",
+    "foto": "https://via.placeholder.com/160x200.png?text=Foto+3"
+  },
+  {
+    "id": "dep-4",
+    "nome": "Deputada Exemplo 4",
+    "partido": "RTY",
+    "uf": "MG",
+    "foto": "https://via.placeholder.com/160x200.png?text=Foto+4"
+  }
+];
+
