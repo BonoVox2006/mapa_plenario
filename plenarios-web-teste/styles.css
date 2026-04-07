@@ -211,17 +211,20 @@ body{
   align-items:center;
 }
 .stage__meta{
-  display:flex;
+  display:grid;
+  grid-template-columns:max-content minmax(120px,1fr) max-content;
   gap:10px;
   align-items:center;
-  justify-content:space-between;
   margin-bottom:12px;
-  flex-wrap:wrap;
+  width:100%;
+  max-width:100%;
+  overflow:hidden;
 }
 .stage__metaCenter{
-  flex:1 1 240px;
   display:flex;
   justify-content:center;
+  justify-self:center;
+  min-width:120px;
 }
 .pill{
   border:1px solid var(--border);
