@@ -3,6 +3,7 @@ const DEPUTIES_KEY = "plenario_deputies_v1";
 const DEPUTIES_META_KEY = "plenario_deputies_meta_v1";
 const COMMISSION_UI_PREF_KEY = "plenario_commission_ui_pref_v1";
 const SHARED_SYNC_ENABLED = location.protocol !== "file:";
+const IS_LINUX_CLIENT = /linux/i.test(navigator.userAgent) && !/android/i.test(navigator.userAgent);
 
 // Layouts fixos dos plenários (independentes de data-layout.js para evitar problemas de carregamento)
 /** @type {import("./app").Layout[]} */ // apenas para editores; ignorado no navegador
@@ -1327,9 +1328,21 @@ async function main() {
 
   if (SHARED_SYNC_ENABLED) {
     setInterval(() => {
-      if (document.hidden) return;
+      if (!IS_LINUX_CLIENT && document.hidden) return;
       void syncCurrentLayoutFromServer();
     }, 3000);
+
+    if (IS_LINUX_CLIENT) {
+      window.addEventListener("focus", () => {
+        void syncCurrentLayoutFromServer();
+      });
+      window.addEventListener("online", () => {
+        void syncCurrentLayoutFromServer();
+      });
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) void syncCurrentLayoutFromServer();
+      });
+    }
   }
 
   // Actions
