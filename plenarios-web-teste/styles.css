@@ -94,6 +94,7 @@ body{
   gap:16px;
   padding:16px;
   height:calc(100% - 68px);
+  transition:grid-template-columns .2s ease;
 }
 @media (max-width: 1050px){
   .layout{grid-template-columns: 1fr; height:auto}
@@ -104,6 +105,19 @@ body{
   flex-direction:column;
   gap:14px;
   min-height:0;
+  min-width:0;
+  transition:opacity .16s ease, transform .2s ease;
+}
+
+.layout.layout--panelHidden{
+  grid-template-columns: 0 1fr;
+}
+
+.layout.layout--panelHidden .panel{
+  opacity:0;
+  transform:translateX(-12px);
+  pointer-events:none;
+  overflow:hidden;
 }
 .card{
   background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));

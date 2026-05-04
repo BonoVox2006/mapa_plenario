@@ -18,6 +18,15 @@
         <div id="currentPlenarioText" class="topbar__plenario">Você está no Plenário 1</div>
       </div>
       <div class="topbar__right">
+        <button
+          id="btnTogglePanel"
+          class="btn btn--ghost"
+          type="button"
+          aria-controls="leftPanel"
+          aria-expanded="true"
+        >
+          Ocultar menu
+        </button>
         <button id="btnImportDeputies" class="btn btn--ghost" type="button">Importar deputados (PDF)</button>
         <button id="btnSyncDeputies" class="btn btn--ghost" type="button">Atualizar do site</button>
         <button id="btnClear" class="btn btn--danger" type="button">Limpar mapa</button>
@@ -25,7 +34,7 @@
     </header>
 
     <main class="layout">
-      <aside class="panel">
+      <aside id="leftPanel" class="panel">
         <section class="card">
           <div class="card__title">Comissões</div>
           <div class="stack">
@@ -171,6 +180,6 @@
     </dialog>
 
     <script src="./data-deputados.js?v=1"></script>
-    <script src="./app.js?v=34"></script>
+    <script src="./app.js?v=35"></script>
   </body>
 </html>

@@ -2,6 +2,7 @@ const STORAGE_KEY = "plenario_map_v2";
 const DEPUTIES_KEY = "plenario_deputies_v1";
 const DEPUTIES_META_KEY = "plenario_deputies_meta_v1";
 const COMMISSION_UI_PREF_KEY = "plenario_commission_ui_pref_v1";
+const PANEL_COLLAPSED_KEY = "plenario_panel_collapsed_v1";
 const SHARED_SYNC_ENABLED = location.protocol !== "file:";
 const IS_LINUX_CLIENT = /linux/i.test(navigator.userAgent) && !/android/i.test(navigator.userAgent);
 
@@ -810,8 +811,38 @@ async function main() {
 
   const tabsRoot = document.getElementById("layoutTabs");
   const currentPlenarioText = $("#currentPlenarioText");
+  const layoutRoot = document.querySelector(".layout");
+  const togglePanelBtn = $("#btnTogglePanel");
   let state = loadState(currentLayout);
   let currentLayoutVersion = -1;
+
+  const setPanelCollapsed = (collapsed) => {
+    if (!layoutRoot || !togglePanelBtn) return;
+    layoutRoot.classList.toggle("layout--panelHidden", !!collapsed);
+    togglePanelBtn.textContent = collapsed ? "Mostrar menu" : "Ocultar menu";
+    togglePanelBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    try {
+      localStorage.setItem(PANEL_COLLAPSED_KEY, collapsed ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  };
+
+  const loadPanelCollapsedPref = () => {
+    try {
+      return localStorage.getItem(PANEL_COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  };
+
+  if (togglePanelBtn && layoutRoot) {
+    setPanelCollapsed(loadPanelCollapsedPref());
+    togglePanelBtn.addEventListener("click", () => {
+      const next = !layoutRoot.classList.contains("layout--panelHidden");
+      setPanelCollapsed(next);
+    });
+  }
 
   const updateStatus = () => {
     const meta = loadDeputiesMeta();
