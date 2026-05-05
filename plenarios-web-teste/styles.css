@@ -226,8 +226,8 @@ body{
 }
 .stage__meta{
   display:grid;
-  /* 1ª coluna só até o fim do “16”; encolhe com rolagem se a tela for estreita */
-  grid-template-columns:minmax(0,max-content) auto minmax(0,1fr);
+  /* Plenário e status “justos”; meio absorve o espaço para centralizar o botão */
+  grid-template-columns:minmax(0,max-content) minmax(120px,1fr) minmax(0,max-content);
   gap:10px;
   align-items:center;
   margin-bottom:12px;
@@ -262,12 +262,14 @@ body{
   flex:0 0 auto;
 }
 #statusText.pill{
-  min-width:0;
+  justify-self:end;
+  width:max-content;
   max-width:100%;
+  min-width:0;
   justify-content:center;
   text-align:center;
   white-space:normal;
-  overflow-x:auto;
+  box-sizing:border-box;
 }
 @media (max-width:900px){
   .stage__meta{
@@ -284,7 +286,9 @@ body{
   }
   #statusText{
     order:3;
-    width:100%;
+    justify-self:center;
+    width:max-content;
+    max-width:100%;
   }
 }
 .pill{
