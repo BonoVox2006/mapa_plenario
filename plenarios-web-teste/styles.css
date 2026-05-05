@@ -226,8 +226,8 @@ body{
 }
 .stage__meta{
   display:grid;
-  /* 1ª coluna pode encolher: evita cortar os botões 1–16 em telas estreitas */
-  grid-template-columns:minmax(0,1fr) auto minmax(0,min(360px,40vw));
+  /* 1ª coluna só até o fim do “16”; encolhe com rolagem se a tela for estreita */
+  grid-template-columns:minmax(0,max-content) auto minmax(0,1fr);
   gap:10px;
   align-items:center;
   margin-bottom:12px;
@@ -249,6 +249,8 @@ body{
   flex-wrap:nowrap;
   align-items:center;
   gap:6px;
+  justify-self:start;
+  width:max-content;
   max-width:100%;
   min-width:0;
   overflow-x:auto;
@@ -278,7 +280,7 @@ body{
   }
   #layoutTabs{
     order:1;
-    width:100%;
+    max-width:100%;
   }
   #statusText{
     order:3;
