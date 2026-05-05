@@ -883,26 +883,52 @@ async function main() {
     });
   };
 
-  const rerenderGrid = () => {
-    renderGrid(currentLayout, deputiesById, state, activeSeatKey, (seat, key) => {
-      activeSeat = seat;
-      activeSeatKey = key;
-      rerenderGrid();
-      refreshInspector();
+  function resetSeatDialogChrome() {
+    const titleEl = $("#seatDialogTitle");
+    const assignBtn = $("#btnAssignSelected");
+    if (titleEl) titleEl.textContent = "Alocar deputado";
+    if (assignBtn) assignBtn.style.removeProperty("display");
+  }
 
-      const dialog = $("#seatDialog");
-      $("#dialogSeatLabel").textContent = `Cadeira: ${seat.label}`;
-      dialog.showModal();
-    }, memberDeputyIds);
-    renderPresidentArea(currentLayout, deputiesById, state, activeSeatKey, (seat, key) => {
-      activeSeat = seat;
-      activeSeatKey = key;
+  /** Clique simples: vazio + deputado selecionado → aloca direto; ocupado → só “Remover”. */
+  function handleSeatClick(seat, key) {
+    activeSeat = seat;
+    activeSeatKey = key;
+
+    const depId = state.allocations[key] || null;
+    const occupied = !!depId;
+
+    if (!occupied && selectedDeputyId) {
+      state.allocations[key] = selectedDeputyId;
+      saveState(state);
       rerenderGrid();
       refreshInspector();
-      const dialog = $("#seatDialog");
-      $("#dialogSeatLabel").textContent = `Cadeira: ${seat.label}`;
-      dialog.showModal();
-    }, memberDeputyIds);
+      updateStatus();
+      return;
+    }
+
+    rerenderGrid();
+    refreshInspector();
+
+    if (!occupied) {
+      return;
+    }
+
+    const dep = depId ? deputiesById.get(depId) : null;
+    const dialog = $("#seatDialog");
+    const titleEl = $("#seatDialogTitle");
+    const assignBtn = $("#btnAssignSelected");
+    if (titleEl) titleEl.textContent = "Cadeira ocupada";
+    $("#dialogSeatLabel").textContent = dep
+      ? `Cadeira: ${seat.label} — ${dep.nome}`
+      : `Cadeira: ${seat.label}`;
+    if (assignBtn) assignBtn.style.display = "none";
+    dialog.showModal();
+  }
+
+  const rerenderGrid = () => {
+    renderGrid(currentLayout, deputiesById, state, activeSeatKey, handleSeatClick, memberDeputyIds);
+    renderPresidentArea(currentLayout, deputiesById, state, activeSeatKey, handleSeatClick, memberDeputyIds);
   };
 
   const rerenderDeputyList = () => {
@@ -1309,15 +1335,7 @@ async function main() {
     rerenderGrid();
     refreshInspector();
     updateStatus();
-    renderPresidentArea(currentLayout, deputiesById, state, activeSeatKey, (seat, key) => {
-      activeSeat = seat;
-      activeSeatKey = key;
-      rerenderGrid();
-      refreshInspector();
-      const dialog = $("#seatDialog");
-      $("#dialogSeatLabel").textContent = `Cadeira: ${seat.label}`;
-      dialog.showModal();
-    }, memberDeputyIds);
+    renderPresidentArea(currentLayout, deputiesById, state, activeSeatKey, handleSeatClick, memberDeputyIds);
     if (tabsRoot) {
       for (const btn of tabsRoot.querySelectorAll(".pillTab")) {
         btn.classList.toggle("pillTab--active", btn.dataset.layout === id);
@@ -1378,6 +1396,8 @@ async function main() {
 
   // Actions
   $("#deputySearch").addEventListener("input", rerenderDeputyList);
+
+  $("#seatDialog")?.addEventListener("close", resetSeatDialogChrome);
 
   $("#btnAssignSelected").addEventListener("click", () => {
     if (!activeSeatKey) return;
