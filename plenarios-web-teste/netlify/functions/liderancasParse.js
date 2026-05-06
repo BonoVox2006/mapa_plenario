@@ -22,6 +22,27 @@ function classifyScope(scopeName) {
   return "partido";
 }
 
+/** Título de <h3> sem acentos, minúsculo. */
+function normalizeSectionTitle(html) {
+  const text = stripTags(html)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  return text;
+}
+
+/**
+ * Na seção "Líderes do Governo… Partidos que participam de Bloco Parlamentar",
+ * a Câmara repete líderes de cada partido membro de bloco — isso não entra na ferramenta.
+ * Mantém só Governo, Maioria, Oposição e Minoria (e quaisquer h4 que não sejam `partido`).
+ */
+function sectionExcludesPartyOnlyH4(h3InnerHtml) {
+  const t = normalizeSectionTitle(h3InnerHtml);
+  return t.includes("participam de bloco parlamentar");
+}
+
 function buildScopeLabel(roleType, scopeName) {
   const rolePt =
     roleType === "vice_lider" ? "Vice-líder" : roleType === "representante" ? "Representante" : "Líder";
@@ -59,77 +80,111 @@ function extractSection(html, strongLabel) {
 }
 
 /**
- * Extrai blocos <h4>…</h4> seguidos de Líder / Vice-Líderes / Representante.
+ * Extrai blocos <h4>…</h4> (Líder / Vice-Líderes / Representante) dentro de cada <h3>.
+ * Ignora, na seção “…Partidos que participam de Bloco Parlamentar”, apenas linhas de partido isolado
+ * (líder institucional do partido no bloco), mantendo Governo/Maioria/Oposição/Minoria.
  * @param {string} html
  * @param {string} sourceUrl
  */
 function parseLiderancasHtml(html, sourceUrl) {
   /** @type {any[]} */
   const rows = [];
-  const h4re = /<h4[^>]*>([\s\S]*?)<\/h4>/gi;
-  const matches = [];
-  let m;
-  while ((m = h4re.exec(html)) !== null) {
-    matches.push({ inner: m[1], index: m.index, fullLen: m[0].length });
+
+  const h3Matches = [...html.matchAll(/<h3[^>]*>([\s\S]*?)<\/h3>/gi)];
+  /** @type {{ title: string; body: string; excludePartyH4: boolean }[]} */
+  const segments = [];
+
+  if (h3Matches.length === 0) {
+    segments.push({ title: "", body: html, excludePartyH4: false });
+  } else {
+    let cursor = 0;
+    for (let i = 0; i < h3Matches.length; i++) {
+      const m = h3Matches[i];
+      if (m.index > cursor) {
+        segments.push({ title: "", body: html.slice(cursor, m.index), excludePartyH4: false });
+      }
+      const bodyStart = m.index + m[0].length;
+      const bodyEnd = i + 1 < h3Matches.length ? h3Matches[i + 1].index : html.length;
+      segments.push({
+        title: m[1],
+        body: html.slice(bodyStart, bodyEnd),
+        excludePartyH4: sectionExcludesPartyOnlyH4(m[1])
+      });
+      cursor = bodyEnd;
+    }
+    if (cursor < html.length) {
+      segments.push({ title: "", body: html.slice(cursor), excludePartyH4: false });
+    }
   }
 
-  for (let i = 0; i < matches.length; i++) {
-    const scopeName = stripTags(matches[i].inner);
-    if (!scopeName || scopeName.length < 3) continue;
-
-    const start = matches[i].index + matches[i].fullLen;
-    const end = i + 1 < matches.length ? matches[i + 1].index : html.length;
-    const blockHtml = html.slice(start, end);
-    const scopeType = classifyScope(scopeName);
-
-    const leaders = extractSection(blockHtml, "Líder");
-    const vices = extractSection(blockHtml, "Vice-Líderes");
-    const reps = extractSection(blockHtml, "Representante");
-
-    for (const link of extractLinksFromUl(leaders)) {
-      rows.push({
-        row_key: rowKey(scopeType, scopeName, "lider", link.id, link.nome),
-        scope_type: scopeType,
-        scope_name: scopeName,
-        role_type: "lider",
-        deputado_id_camara: link.id,
-        deputado_nome: link.nome,
-        sigla_partido: null,
-        uf: null,
-        scope_label: buildScopeLabel("lider", scopeName),
-        source_url: sourceUrl,
-        active: true
-      });
+  for (const seg of segments) {
+    const h4re = /<h4[^>]*>([\s\S]*?)<\/h4>/gi;
+    const matches = [];
+    let m;
+    while ((m = h4re.exec(seg.body)) !== null) {
+      matches.push({ inner: m[1], index: m.index, fullLen: m[0].length });
     }
-    for (const link of extractLinksFromUl(vices)) {
-      rows.push({
-        row_key: rowKey(scopeType, scopeName, "vice_lider", link.id, link.nome),
-        scope_type: scopeType,
-        scope_name: scopeName,
-        role_type: "vice_lider",
-        deputado_id_camara: link.id,
-        deputado_nome: link.nome,
-        sigla_partido: null,
-        uf: null,
-        scope_label: buildScopeLabel("vice_lider", scopeName),
-        source_url: sourceUrl,
-        active: true
-      });
-    }
-    for (const link of extractLinksFromUl(reps)) {
-      rows.push({
-        row_key: rowKey(scopeType, scopeName, "representante", link.id, link.nome),
-        scope_type: scopeType,
-        scope_name: scopeName,
-        role_type: "representante",
-        deputado_id_camara: link.id,
-        deputado_nome: link.nome,
-        sigla_partido: null,
-        uf: null,
-        scope_label: buildScopeLabel("representante", scopeName),
-        source_url: sourceUrl,
-        active: true
-      });
+
+    for (let i = 0; i < matches.length; i++) {
+      const scopeName = stripTags(matches[i].inner);
+      if (!scopeName || scopeName.length < 3) continue;
+
+      const start = matches[i].index + matches[i].fullLen;
+      const end = i + 1 < matches.length ? matches[i + 1].index : seg.body.length;
+      const blockHtml = seg.body.slice(start, end);
+      const scopeType = classifyScope(scopeName);
+
+      if (seg.excludePartyH4 && scopeType === "partido") continue;
+
+      const leaders = extractSection(blockHtml, "Líder");
+      const vices = extractSection(blockHtml, "Vice-Líderes");
+      const reps = extractSection(blockHtml, "Representante");
+
+      for (const link of extractLinksFromUl(leaders)) {
+        rows.push({
+          row_key: rowKey(scopeType, scopeName, "lider", link.id, link.nome),
+          scope_type: scopeType,
+          scope_name: scopeName,
+          role_type: "lider",
+          deputado_id_camara: link.id,
+          deputado_nome: link.nome,
+          sigla_partido: null,
+          uf: null,
+          scope_label: buildScopeLabel("lider", scopeName),
+          source_url: sourceUrl,
+          active: true
+        });
+      }
+      for (const link of extractLinksFromUl(vices)) {
+        rows.push({
+          row_key: rowKey(scopeType, scopeName, "vice_lider", link.id, link.nome),
+          scope_type: scopeType,
+          scope_name: scopeName,
+          role_type: "vice_lider",
+          deputado_id_camara: link.id,
+          deputado_nome: link.nome,
+          sigla_partido: null,
+          uf: null,
+          scope_label: buildScopeLabel("vice_lider", scopeName),
+          source_url: sourceUrl,
+          active: true
+        });
+      }
+      for (const link of extractLinksFromUl(reps)) {
+        rows.push({
+          row_key: rowKey(scopeType, scopeName, "representante", link.id, link.nome),
+          scope_type: scopeType,
+          scope_name: scopeName,
+          role_type: "representante",
+          deputado_id_camara: link.id,
+          deputado_nome: link.nome,
+          sigla_partido: null,
+          uf: null,
+          scope_label: buildScopeLabel("representante", scopeName),
+          source_url: sourceUrl,
+          active: true
+        });
+      }
     }
   }
 

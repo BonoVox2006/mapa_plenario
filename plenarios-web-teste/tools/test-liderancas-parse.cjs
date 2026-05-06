@@ -43,4 +43,21 @@ assert.strictEqual(byId.get(999001).scope_type, "partido");
 assert.strictEqual(byId.get(999003).scope_type, "bloco");
 assert.strictEqual(byId.get(999004).scope_type, "governo");
 
-console.log("test-liderancas-parse: OK", rows.length, "linhas");
+/** Seção “Partidos que participam de Bloco Parlamentar”: não extrair líder de partido isolado. */
+const htmlExcluiPartidoNoBloco = `
+<body>
+<h3><span>Líderes do Governo, da Minoria e de Partidos que participam de Bloco Parlamentar</span></h3>
+<h4>Maioria - Maioria</h4>
+<p><strong>Líder:</strong></p>
+<ul><li><a href="https://www.camara.leg.br/deputados/880001">Líder Maioria</a></li></ul>
+<h4>UNIÃO - União Brasil</h4>
+<p><strong>Líder:</strong></p>
+<ul><li><a href="https://www.camara.leg.br/deputados/880002">Líder Partido Bloco</a></li></ul>
+</body>
+`;
+const rowsBloco = parseLiderancasHtml(htmlExcluiPartidoNoBloco, SOURCE_URL);
+assert.strictEqual(rowsBloco.length, 1, "deve ignorar h4 de partido na seção de bloco parlamentar");
+assert.strictEqual(rowsBloco[0].deputado_id_camara, 880001);
+assert.strictEqual(rowsBloco[0].scope_type, "maioria");
+
+console.log("test-liderancas-parse: OK", rows.length + rowsBloco.length, "linhas (2 cenários)");

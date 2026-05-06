@@ -830,6 +830,108 @@ function renderPresidentArea(
   host.appendChild(circles);
 }
 
+/**
+ * Substitui a lista nativa do &lt;select&gt; (cinza no Windows) por painel no tema do app.
+ * Mantém o &lt;select&gt; no DOM para .value, change e leitores de tela.
+ */
+function mountCustomSelect(selectEl) {
+  if (!selectEl || selectEl.dataset.customSelectMounted) return;
+  selectEl.dataset.customSelectMounted = "1";
+
+  const wrap = document.createElement("div");
+  wrap.className = "customSelect";
+  const parent = selectEl.parentNode;
+  parent.insertBefore(wrap, selectEl);
+  wrap.appendChild(selectEl);
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "customSelect__btn";
+  btn.setAttribute("aria-haspopup", "listbox");
+  btn.setAttribute("aria-expanded", "false");
+  btn.setAttribute(
+    "aria-label",
+    selectEl.id === "commissionType" ? "Tipo de comissão" : selectEl.id === "commissionSelect" ? "Comissão" : "Selecionar"
+  );
+
+  const panel = document.createElement("div");
+  panel.className = "customSelect__panel";
+  panel.setAttribute("role", "listbox");
+  panel.hidden = true;
+
+  wrap.insertBefore(btn, selectEl);
+  wrap.appendChild(panel);
+
+  selectEl.classList.add("customSelect__native");
+
+  const closePanel = () => {
+    panel.hidden = true;
+    btn.setAttribute("aria-expanded", "false");
+  };
+
+  const buildPanelItems = () => {
+    panel.innerHTML = "";
+    const opts = Array.from(selectEl.options);
+    for (let i = 0; i < opts.length; i++) {
+      const opt = opts[i];
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "customSelect__option";
+      if (opt.selected) row.classList.add("customSelect__option--active");
+      row.setAttribute("role", "option");
+      row.setAttribute("aria-selected", opt.selected ? "true" : "false");
+      row.textContent = opt.textContent || opt.value || "—";
+      row.dataset.value = opt.value;
+      if (opt.disabled) {
+        row.disabled = true;
+        row.classList.add("customSelect__option--disabled");
+      }
+      row.addEventListener("click", () => {
+        if (opt.disabled) return;
+        selectEl.selectedIndex = i;
+        selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+        syncButton();
+        closePanel();
+      });
+      panel.appendChild(row);
+    }
+  };
+
+  const syncButton = () => {
+    const idx = selectEl.selectedIndex;
+    const sel = idx >= 0 ? selectEl.options[idx] : null;
+    btn.textContent = sel ? sel.textContent : "";
+  };
+
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (panel.hidden) {
+      buildPanelItems();
+      panel.hidden = false;
+      btn.setAttribute("aria-expanded", "true");
+    } else {
+      closePanel();
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!wrap.contains(e.target)) closePanel();
+  });
+
+  wrap.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closePanel();
+  });
+
+  selectEl.addEventListener("change", syncButton);
+  syncButton();
+
+  selectEl._customSelectSync = () => {
+    syncButton();
+    if (!panel.hidden) buildPanelItems();
+  };
+}
+
 async function main() {
   /** @type {Layout[]} */
   const allLayouts = FIXED_PLENARIO_LAYOUTS;
@@ -1080,6 +1182,8 @@ async function main() {
   const findDeputyResult = $("#findDeputyResult");
   const commissionTypeEl = $("#commissionType");
   const commissionSelectEl = $("#commissionSelect");
+  mountCustomSelect(commissionTypeEl);
+  mountCustomSelect(commissionSelectEl);
   let findDeputySelectedId = null;
   /** @type {{id:string,name:string,type:string}[]} */
   let allCommissions = [];
@@ -1093,6 +1197,7 @@ async function main() {
       opt.value = "";
       opt.textContent = "Nenhuma comissão ativa encontrada";
       commissionSelectEl.appendChild(opt);
+      commissionSelectEl._customSelectSync?.();
       return;
     }
     for (const c of items) {
@@ -1102,6 +1207,7 @@ async function main() {
       if (selectedId && selectedId === c.id) opt.selected = true;
       commissionSelectEl.appendChild(opt);
     }
+    commissionSelectEl._customSelectSync?.();
   };
 
   const clearMemberMarks = () => {
@@ -1219,6 +1325,7 @@ async function main() {
   const loadCommissions = async () => {
     if (!commissionTypeEl || !commissionSelectEl) return;
     commissionSelectEl.innerHTML = `<option value="">Carregando comissões...</option>`;
+    commissionSelectEl._customSelectSync?.();
     try {
       /** @type {{id:string,name:string,type:string}[]} */
       const out = [];
@@ -1262,9 +1369,13 @@ async function main() {
       } else {
         clearMemberMarks();
       }
+      commissionTypeEl._customSelectSync?.();
+      commissionSelectEl._customSelectSync?.();
     } catch {
       commissionSelectEl.innerHTML = `<option value="">Falha ao carregar comissões</option>`;
       clearMemberMarks();
+      commissionTypeEl._customSelectSync?.();
+      commissionSelectEl._customSelectSync?.();
     }
   };
 
