@@ -816,6 +816,108 @@ async function main() {
   let state = loadState(currentLayout);
   let currentLayoutVersion = -1;
 
+  /** @type {Map<string, any[]>} */
+  let liderancasByCamara = new Map();
+  let liderancasApiMeta = null;
+  let liderancasFetchError = null;
+
+  function buildLiderancasIndex(rows) {
+    const m = new Map();
+    for (const row of rows || []) {
+      const id = row?.deputado_id_camara != null ? String(row.deputado_id_camara) : "";
+      if (!id) continue;
+      if (!m.has(id)) m.set(id, []);
+      m.get(id).push(row);
+    }
+    return m;
+  }
+
+  async function fetchLiderancasSnapshot() {
+    if (!SHARED_SYNC_ENABLED) return;
+    try {
+      const res = await fetch("/api/liderancas", { headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      liderancasByCamara = buildLiderancasIndex(data.dados || []);
+      liderancasApiMeta = data.meta || null;
+      liderancasFetchError = null;
+    } catch (e) {
+      liderancasFetchError = String(e?.message || e);
+    }
+  }
+
+  function formatLeadershipLine(dep, row) {
+    const p = dep?.partido || row.sigla_partido || "—";
+    const u = dep?.uf || row.uf || "—";
+    const tag = row.scope_label || row.scope_name || "Liderança";
+    const nome = dep?.nome || row.deputado_nome || "Deputado(a)";
+    return `${nome} (${p}/${u}) — ${tag}`;
+  }
+
+  function updateLeadershipPanel() {
+    const listEl = document.getElementById("liderancasPanelList");
+    const metaEl = document.getElementById("liderancasPanelMeta");
+    if (!listEl) return;
+
+    /** @type {{line:string}[]} */
+    const items = [];
+    const seen = new Set();
+    for (const depId of Object.values(state.allocations)) {
+      if (!depId) continue;
+      const num = extractNumericDeputyId(depId);
+      if (!num) continue;
+      const rows = liderancasByCamara.get(num) || [];
+      const dep = deputiesById.get(depId) || null;
+      for (const row of rows) {
+        const rk = row.row_key || `${row.scope_type}|${row.role_type}|${row.scope_name}`;
+        const key = `${num}|${rk}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        items.push({ line: formatLeadershipLine(dep, row) });
+      }
+    }
+    items.sort((a, b) => String(a.line).localeCompare(String(b.line), "pt-BR"));
+
+    listEl.innerHTML = "";
+    if (!items.length) {
+      const li = document.createElement("li");
+      li.className = "liderancasPanel__item liderancasPanel__item--empty";
+      li.textContent =
+        "Nenhum líder ou vice-líder (lista oficial da Câmara) está alocado neste plenário no momento.";
+      listEl.appendChild(li);
+    } else {
+      for (const { line } of items) {
+        const li = document.createElement("li");
+        li.className = "liderancasPanel__item";
+        li.textContent = line;
+        listEl.appendChild(li);
+      }
+    }
+
+    if (metaEl) {
+      if (!SHARED_SYNC_ENABLED) {
+        metaEl.textContent =
+          "Lista oficial de lideranças fica disponível ao abrir o app pelo Netlify/servidor (não em arquivo local).";
+      } else if (liderancasFetchError) {
+        metaEl.textContent = `Não foi possível carregar lideranças: ${liderancasFetchError}`;
+      } else {
+        const last = liderancasApiMeta?.lastSuccessAt
+          ? new Date(liderancasApiMeta.lastSuccessAt).toLocaleString("pt-BR")
+          : "—";
+        const n = Number(liderancasApiMeta?.lastItemCount || 0);
+        let errHint = "";
+        if (liderancasApiMeta?.lastError) {
+          const em = String(liderancasApiMeta.lastError);
+          errHint =
+            em.length > 120
+              ? ` • Atenção: última sync falhou (${em.slice(0, 120)}…)`
+              : ` • Atenção: última sync falhou (${em})`;
+        }
+        metaEl.textContent = `Fonte: Câmara (página de lideranças) • Última sync OK: ${last} • ${n} registro(s) na base${errHint}`;
+      }
+    }
+  }
+
   const setPanelCollapsed = (collapsed) => {
     if (!layoutRoot || !togglePanelBtn) return;
     layoutRoot.classList.toggle("layout--panelHidden", !!collapsed);
@@ -929,6 +1031,7 @@ async function main() {
   const rerenderGrid = () => {
     renderGrid(currentLayout, deputiesById, state, activeSeatKey, handleSeatClick, memberDeputyIds);
     renderPresidentArea(currentLayout, deputiesById, state, activeSeatKey, handleSeatClick, memberDeputyIds);
+    updateLeadershipPanel();
   };
 
   const rerenderDeputyList = () => {
@@ -1376,6 +1479,11 @@ async function main() {
   setActiveLayoutById("1");
 
   if (SHARED_SYNC_ENABLED) {
+    void fetchLiderancasSnapshot().then(() => updateLeadershipPanel());
+    setInterval(() => {
+      void fetchLiderancasSnapshot().then(() => updateLeadershipPanel());
+    }, 10 * 60 * 1000);
+
     setInterval(() => {
       if (!IS_LINUX_CLIENT && document.hidden) return;
       void syncCurrentLayoutFromServer();

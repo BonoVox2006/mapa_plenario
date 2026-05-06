@@ -1,3 +1,7 @@
 SUPABASE_URL=https://SEU-PROJETO.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=SEU_SERVICE_ROLE_KEY
 
+# Opcional: protege GET/POST em /api/liderancas-sync (cron Netlify ou chamada manual com header)
+# Authorization: Bearer <mesmo valor>
+LIDERANCAS_SYNC_SECRET=
+

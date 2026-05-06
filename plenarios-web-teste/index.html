@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mapa de Plenário — Alocação de Deputados</title>
-    <link rel="stylesheet" href="./styles.css?v=12" />
+    <link rel="stylesheet" href="./styles.css?v=13" />
   </head>
   <body>
     <header class="topbar">
@@ -105,6 +105,13 @@
         </div>
         <div id="seatGrid" class="grid" aria-label="Mapa de cadeiras"></div>
         <div id="presidentArea" class="presidentArea" aria-hidden="true"></div>
+        <section id="liderancasPanel" class="liderancasPanel" aria-label="Lideranças no plenário">
+          <div class="liderancasPanel__head">
+            <h2 class="liderancasPanel__title">Líderes e Vice-Líderes alocados neste Plenário</h2>
+            <p id="liderancasPanelMeta" class="liderancasPanel__meta"></p>
+          </div>
+          <ul id="liderancasPanelList" class="liderancasPanel__list"></ul>
+        </section>
       </section>
     </main>
 
@@ -180,6 +187,6 @@
     </dialog>
 
     <script src="./data-deputados.js?v=1"></script>
-    <script src="./app.js?v=36"></script>
+    <script src="./app.js?v=37"></script>
   </body>
 </html>

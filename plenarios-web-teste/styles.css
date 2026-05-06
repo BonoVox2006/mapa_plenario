@@ -409,6 +409,54 @@ body{
   letter-spacing:.04em;
 }
 
+.liderancasPanel{
+  margin-top:22px;
+  width:100%;
+  max-width:min(920px, 100%);
+  align-self:center;
+  padding:14px 16px 16px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(0,0,0,.22);
+  box-sizing:border-box;
+}
+.liderancasPanel__head{margin-bottom:10px}
+.liderancasPanel__title{
+  margin:0;
+  font-size:14px;
+  font-weight:900;
+  letter-spacing:.02em;
+  color:var(--text);
+}
+.liderancasPanel__meta{
+  margin:6px 0 0;
+  font-size:11px;
+  line-height:1.45;
+  color:var(--muted2);
+}
+.liderancasPanel__list{
+  list-style:none;
+  margin:0;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.liderancasPanel__item{
+  font-size:13px;
+  line-height:1.4;
+  padding:10px 12px;
+  border-radius:12px;
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.08);
+  color:var(--text);
+}
+.liderancasPanel__item--empty{
+  color:var(--muted2);
+  font-style:italic;
+  border-style:dashed;
+}
+
 .seat{
   border:1px solid rgba(255,255,255,.10);
   border-radius:16px;

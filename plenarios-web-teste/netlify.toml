@@ -11,3 +11,17 @@
   from = "/api/deputados"
   to = "/.netlify/functions/deputados"
   status = 200
+
+[[redirects]]
+  from = "/api/liderancas"
+  to = "/.netlify/functions/liderancas"
+  status = 200
+
+[[redirects]]
+  from = "/api/liderancas-sync"
+  to = "/.netlify/functions/liderancas-sync"
+  status = 200
+
+# Agendamento (Netlify Scheduled Functions). Se o deploy acusar erro, remova este bloco.
+[functions.liderancas-sync]
+  schedule = "0 */2 * * *"
