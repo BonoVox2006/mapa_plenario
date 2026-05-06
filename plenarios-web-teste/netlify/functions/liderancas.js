@@ -1,11 +1,13 @@
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
+  "Cache-Control": "no-store",
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization"
 };
 
-const CACHE_MS = 10 * 60 * 1000;
+/** Curto: após /liderancas-sync o browser não pode ficar até 10 min com JSON antigo em memória na function. */
+const CACHE_MS = 45 * 1000;
 let cache = { at: 0, payload: null };
 
 function response(statusCode, bodyObj) {
@@ -47,7 +49,10 @@ exports.handler = async (event) => {
 
   try {
     const now = Date.now();
-    if (cache.payload && now - cache.at < CACHE_MS) {
+    const bypass =
+      event.queryStringParameters?.refresh === "1" ||
+      event.queryStringParameters?.nocache === "1";
+    if (!bypass && cache.payload && now - cache.at < CACHE_MS) {
       return response(200, { ...cache.payload, cached: true });
     }
 

@@ -147,7 +147,7 @@ function extractSection(html, strongLabel) {
  */
 function parseLiderancasHtml(html, sourceUrl) {
   /** @type {any[]} */
-  const rows = [];
+  let rows = [];
 
   const h3Matches = [...html.matchAll(/<h3[^>]*>([\s\S]*?)<\/h3>/gi)];
   /** @type {{ title: string; body: string; excludePartyH4: boolean }[]} */
@@ -257,7 +257,10 @@ function parseLiderancasHtml(html, sourceUrl) {
     }
   }
 
-  return dropPartidoRowsListedInBlocos(rows, partidosQueEstaoEmBloco);
+  rows = dropPartidoRowsListedInBlocos(rows, partidosQueEstaoEmBloco);
+  rows = dropPartidoLiderIfDeputadoInBloco(rows);
+  rows = dropBlocoLiderWhenSameDeputyIsViceInThatBloco(rows);
+  return rows;
 }
 
 /**
@@ -270,6 +273,42 @@ function dropPartidoRowsListedInBlocos(rows, partidosQueEstaoEmBloco) {
     if (r.scope_type !== "partido") return true;
     const k = partidoHeadKey(r.scope_name);
     return !partidosQueEstaoEmBloco.has(k);
+  });
+}
+
+/**
+ * Quem já figura em um Bloco Parlamentar (líder ou vice) não deve manter cargo institucional
+ * de partido isolado (líder/representante na lista da Câmara), ex.: vice do bloco + "líder do PP".
+ */
+function dropPartidoLiderIfDeputadoInBloco(rows) {
+  const inBloco = new Set();
+  for (const r of rows) {
+    if (r.scope_type === "bloco") inBloco.add(r.deputado_id_camara);
+  }
+  if (!inBloco.size) return rows;
+  return rows.filter((r) => {
+    if (r.scope_type !== "partido") return true;
+    if (!inBloco.has(r.deputado_id_camara)) return true;
+    return r.role_type !== "lider" && r.role_type !== "representante";
+  });
+}
+
+/**
+ * Se o mesmo deputado aparece como vice-líder e também na lista de "Líder" do mesmo bloco (h4),
+ * mantém só o vice — evita selo L indevido quando o HTML da Câmara duplica o nome.
+ */
+function dropBlocoLiderWhenSameDeputyIsViceInThatBloco(rows) {
+  const viceKeys = new Set();
+  for (const r of rows) {
+    if (r.scope_type === "bloco" && r.role_type === "vice_lider") {
+      viceKeys.add(`${r.scope_name}\t${r.deputado_id_camara}`);
+    }
+  }
+  if (!viceKeys.size) return rows;
+  return rows.filter((r) => {
+    if (r.scope_type !== "bloco" || r.role_type !== "lider") return true;
+    const k = `${r.scope_name}\t${r.deputado_id_camara}`;
+    return !viceKeys.has(k);
   });
 }
 

@@ -96,8 +96,48 @@ const rowsDash = parseLiderancasHtml(htmlTravessao, SOURCE_URL);
 const idsDash = new Set(rowsDash.map((r) => r.deputado_id_camara));
 assert.ok(idsDash.has(660001) && !idsDash.has(660002), "travessão Unicode deve acionar filtro PP");
 
+/** Mesmo deputado: vice no bloco + líder de partido que não está no título do bloco → cai só o líder partido. */
+const htmlMesmoDepBlocoEPartido = `
+<body>
+<h3><span>Blocos</span></h3>
+<h4>UNIÃO, MDB - Bloco Parlamentar X</h4>
+<p><strong>Líder:</strong></p>
+<ul><li><a href="https://www.camara.leg.br/deputados/550001">Outro</a></li></ul>
+<p><strong>Vice-Líderes:</strong></p>
+<ul><li><a href="https://www.camara.leg.br/deputados/550099">Mesmo Dep</a></li></ul>
+<h3><span>Outros</span></h3>
+<h4>PL - Partido Liberal</h4>
+<p><strong>Líder:</strong></p>
+<ul><li><a href="https://www.camara.leg.br/deputados/550099">Mesmo Dep</a></li></ul>
+</body>
+`;
+const rowsSame = parseLiderancasHtml(htmlMesmoDepBlocoEPartido, SOURCE_URL);
+const mesmaPessoa = rowsSame.filter((r) => r.deputado_id_camara === 550099);
+assert.strictEqual(mesmaPessoa.length, 1, "só vice do bloco; líder PL cai por regra bloco+partido");
+assert.strictEqual(mesmaPessoa[0].role_type, "vice_lider");
+
+/** Mesmo deputado listado como Líder e Vice no mesmo h4 de bloco: manter só vice. */
+const htmlLiderEViceMesmoBloco = `
+<body>
+<h3><span>Blocos</span></h3>
+<h4>Bloco Teste - BT</h4>
+<p><strong>Líder:</strong></p>
+<ul>
+  <li><a href="https://www.camara.leg.br/deputados/440001">Dup Nome</a></li>
+</ul>
+<p><strong>Vice-Líderes:</strong></p>
+<ul>
+  <li><a href="https://www.camara.leg.br/deputados/440001">Dup Nome</a></li>
+</ul>
+</body>
+`;
+const rowsDupBloco = parseLiderancasHtml(htmlLiderEViceMesmoBloco, SOURCE_URL);
+assert.strictEqual(rowsDupBloco.length, 1, "duplicata líder+vice mesmo bloco: uma linha");
+assert.strictEqual(rowsDupBloco[0].role_type, "vice_lider");
+assert.strictEqual(rowsDupBloco[0].deputado_id_camara, 440001);
+
 console.log(
   "test-liderancas-parse: OK",
-  rows.length + rowsBloco.length + rowsSigla.length + rowsDash.length,
-  "linhas (4 cenários)"
+  rows.length + rowsBloco.length + rowsSigla.length + rowsDash.length + rowsSame.length,
+  "linhas (5 cenários)"
 );
