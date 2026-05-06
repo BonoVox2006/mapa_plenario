@@ -5,3 +5,6 @@ SUPABASE_SERVICE_ROLE_KEY=SEU_SERVICE_ROLE_KEY
 # Authorization: Bearer <mesmo valor>
 LIDERANCAS_SYNC_SECRET=
 
+# Opcional: true = força sync mesmo fim de semana, feriado ou fora de 8h–19h Brasília (remova depois)
+LIDERANCAS_SYNC_FORCE=
+

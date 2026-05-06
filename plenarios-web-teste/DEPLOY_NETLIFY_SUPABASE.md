@@ -27,7 +27,7 @@ Este projeto já inclui:
 - `netlify/functions/state.js`
 - `netlify/functions/deputados.js`
 - `netlify/functions/liderancas.js` (leitura do snapshot no Supabase)
-- `netlify/functions/liderancas-sync.js` (scraping da página da Câmara + gravação no Supabase; agendamento em `netlify.toml`)
+- `netlify/functions/liderancas-sync.js` (scraping + Supabase; cron **seg–sex** em faixa UTC equivalente a **8h–19h Brasília**; a function também bloqueia fora desse horário, fim de semana e **feriados nacionais** [Brasil API](https://brasilapi.com.br/docs#tag/Feriados); emergência: `LIDERANCAS_SYNC_FORCE=true`)
 
 Rotas prontas:
 - `/api/state`
@@ -53,6 +53,7 @@ Na pasta do projeto:
 - **Lista vazia no painel:** confirme sync (`/api/liderancas-sync`) e se o deputado alocado tem o mesmo id numérico da Câmara (`camara-123` na lista do app).
 - **Sync 401:** definiu `LIDERANCAS_SYNC_SECRET` — inclua o header `Authorization: Bearer ...`.
 - **HTML da Câmara mudou:** o parser pode retornar 0 linhas; a meta em `liderancas_meta` guarda `last_error`; ajuste `netlify/functions/liderancasParse.js`.
+- **Sync retorna `skipped: true`:** fim de semana, fora de 8h–19h (Brasília) ou feriado nacional. Para forçar: `LIDERANCAS_SYNC_FORCE=true` (remova depois).
 
 ## 5) Observações
 - Não mexe na produção local (porta 5173).

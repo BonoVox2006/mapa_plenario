@@ -22,6 +22,98 @@ function getEnvOrThrow(name) {
   return v;
 }
 
+/** Data civil em America/Sao_Paulo (YYYY-MM-DD). */
+function getSaoPauloYmd(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(now);
+  const y = parts.find((p) => p.type === "year").value;
+  const m = parts.find((p) => p.type === "month").value;
+  const d = parts.find((p) => p.type === "day").value;
+  return `${y}-${m}-${d}`;
+}
+
+function isWeekendSaoPaulo(now = new Date()) {
+  const w = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "short"
+  }).format(now);
+  return w === "Sat" || w === "Sun";
+}
+
+/** Hora local 0–23 em America/Sao_Paulo. */
+function getSaoPauloHour(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Sao_Paulo",
+    hour: "numeric",
+    hourCycle: "h23"
+  }).formatToParts(now);
+  return Number(parts.find((p) => p.type === "hour").value);
+}
+
+let holidayNationalSetCache = { year: null, set: null };
+
+/** @returns {Promise<Set<string>|null>} datas YYYY-MM-DD ou null se falhar */
+async function getNationalHolidayDateSet(year) {
+  if (holidayNationalSetCache.year === year && holidayNationalSetCache.set) {
+    return holidayNationalSetCache.set;
+  }
+  const res = await fetch(`https://brasilapi.com.br/api/feriados/v1/${year}`, {
+    headers: { Accept: "application/json" }
+  });
+  if (!res.ok) return null;
+  const arr = await res.json();
+  if (!Array.isArray(arr)) return null;
+  const set = new Set(arr.filter((h) => h.type === "national").map((h) => h.date));
+  holidayNationalSetCache = { year, set };
+  return set;
+}
+
+/**
+ * Não roda: fim de semana; fora de 8h–19h em America/Sao_Paulo; feriado nacional (Brasil API).
+ * Se a API de feriados falhar, não bloqueia por feriado (evita ficar sem sync).
+ * LIDERANCAS_SYNC_FORCE=true ignora fim de semana, feriado e janela de horário.
+ */
+async function shouldSkipLiderancasSync(now = new Date()) {
+  const force = /^1|true$/i.test(String(process.env.LIDERANCAS_SYNC_FORCE || ""));
+  if (force) return { skip: false };
+
+  if (isWeekendSaoPaulo(now)) {
+    return {
+      skip: true,
+      reason: "weekend",
+      detail: "Fim de semana (America/Sao_Paulo)."
+    };
+  }
+
+  const hourSp = getSaoPauloHour(now);
+  if (hourSp < 8 || hourSp > 19) {
+    return {
+      skip: true,
+      reason: "outside_business_hours",
+      detail: `Fora do horário 8h–19h (America/Sao_Paulo); agora ${hourSp}h.`
+    };
+  }
+
+  const ymd = getSaoPauloYmd(now);
+  const year = Number(ymd.slice(0, 4));
+  const holidaySet = await getNationalHolidayDateSet(year);
+  if (!holidaySet) {
+    return { skip: false };
+  }
+  if (holidaySet.has(ymd)) {
+    return {
+      skip: true,
+      reason: "holiday",
+      detail: `Feriado nacional (${ymd}).`
+    };
+  }
+  return { skip: false };
+}
+
 async function supabaseRequest(path, options = {}) {
   const supabaseUrl = getEnvOrThrow("SUPABASE_URL").replace(/\/$/, "");
   const serviceRoleKey = getEnvOrThrow("SUPABASE_SERVICE_ROLE_KEY");
@@ -124,6 +216,17 @@ async function handler(event) {
   try {
     if (event.httpMethod !== "POST" && event.httpMethod !== "GET") {
       return response(405, { error: "Use GET ou POST" });
+    }
+
+    const skipInfo = await shouldSkipLiderancasSync();
+    if (skipInfo.skip) {
+      return response(200, {
+        ok: true,
+        skipped: true,
+        reason: skipInfo.reason,
+        detail: skipInfo.detail,
+        sourceUrl: SOURCE_URL
+      });
     }
 
     const out = await runSync();

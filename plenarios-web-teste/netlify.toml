@@ -22,6 +22,7 @@
   to = "/.netlify/functions/liderancas-sync"
   status = 200
 
-# Agendamento (Netlify Scheduled Functions). Se o deploy acusar erro, remova este bloco.
+# Cron Netlify = UTC. Com Brasília em UTC−3, 8h–19h local ≈ 11h–22h UTC (ajuste se o fuso mudar).
+# Seg–sex apenas; fim de semana não agenda. Feriados: tratados na function (Brasil API + America/Sao_Paulo).
 [functions.liderancas-sync]
-  schedule = "0 */2 * * *"
+  schedule = "0 11-22 * * 1-5"

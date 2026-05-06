@@ -374,6 +374,7 @@ body{
 }
 
 .presidentBox{
+  position:relative;
   width:102px;
   height:102px;
   border-radius:14px;
@@ -409,52 +410,37 @@ body{
   letter-spacing:.04em;
 }
 
-.liderancasPanel{
-  margin-top:22px;
-  width:100%;
-  max-width:min(920px, 100%);
-  align-self:center;
-  padding:14px 16px 16px;
-  border-radius:14px;
-  border:1px solid rgba(255,255,255,.12);
-  background:rgba(0,0,0,.22);
-  box-sizing:border-box;
-}
-.liderancasPanel__head{margin-bottom:10px}
-.liderancasPanel__title{
-  margin:0;
-  font-size:14px;
-  font-weight:900;
-  letter-spacing:.02em;
-  color:var(--text);
-}
-.liderancasPanel__meta{
-  margin:6px 0 0;
-  font-size:11px;
-  line-height:1.45;
-  color:var(--muted2);
-}
-.liderancasPanel__list{
-  list-style:none;
-  margin:0;
-  padding:0;
+/* Selos L / VL (lista oficial Câmara) — canto do card; contraste em fundo escuro e sobre foto clara */
+.seatLeadershipBadges{
+  position:absolute;
+  top:5px;
+  left:5px;
+  z-index:3;
   display:flex;
   flex-direction:column;
-  gap:8px;
+  align-items:flex-start;
+  gap:3px;
+  pointer-events:none;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.55));
 }
-.liderancasPanel__item{
-  font-size:13px;
-  line-height:1.4;
-  padding:10px 12px;
-  border-radius:12px;
-  background:rgba(255,255,255,.05);
-  border:1px solid rgba(255,255,255,.08);
-  color:var(--text);
+.seatLeadershipBadge{
+  display:inline-block;
+  font-size:9px;
+  font-weight:900;
+  line-height:1;
+  letter-spacing:.02em;
+  padding:3px 5px;
+  border-radius:5px;
+  border:1px solid rgba(0,0,0,.35);
+  box-shadow:0 0 0 1px rgba(255,255,255,.25) inset;
 }
-.liderancasPanel__item--empty{
-  color:var(--muted2);
-  font-style:italic;
-  border-style:dashed;
+.seatLeadershipBadge--l{
+  background:#f5c542;
+  color:#141820;
+}
+.seatLeadershipBadge--vl{
+  background:#7dd3fc;
+  color:#0c1929;
 }
 
 .seat{
