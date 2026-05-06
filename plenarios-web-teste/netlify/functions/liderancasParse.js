@@ -10,8 +10,13 @@ function stripTags(s) {
     .trim();
 }
 
+/** Hífen ASCII e travessões comuns (página da Câmara costuma usar – em vez de -). */
+function normalizeDashes(s) {
+  return String(s || "").replace(/[\u2013\u2014\u2212]/g, "-");
+}
+
 function classifyScope(scopeName) {
-  const s = String(scopeName || "").toLowerCase();
+  const s = normalizeDashes(stripTags(scopeName)).toLowerCase();
   if (s.includes("governo")) return "governo";
   if (s.includes("oposi")) return "oposicao";
   if (s.includes("maioria")) return "maioria";
@@ -60,20 +65,19 @@ function normalizePartyKey(s) {
  * Partes antes de " - Bloco Parlamentar …" separadas por vírgula (siglas/nomes no título do bloco).
  */
 function partyTokensFromBlocoTitle(scopeName) {
-  const raw = String(scopeName || "");
-  const m = raw.match(/^([\s\S]+?)\s*-\s*Bloco\s+Parlamentar\b/i);
+  const raw = normalizeDashes(stripTags(scopeName));
+  const m = raw.match(/(.+?)\s*-\s*Bloco\s+Parlamentar\b/i);
   if (!m) return [];
   return m[1]
     .split(",")
-    .map((p) => stripTags(p).trim())
+    .map((p) => p.trim())
     .filter(Boolean);
 }
 
-/** Primeiro trecho do h4 de partido: "PP - Progressistas" → "PP". */
+/** Primeiro trecho do h4 de partido: "PP - Progressistas" → "PP" (aceita – ou -). */
 function partidoHeadKey(scopeName) {
-  const head = String(scopeName || "")
-    .split(/\s*-\s*/)[0]
-    .trim();
+  const flat = normalizeDashes(stripTags(scopeName));
+  const head = flat.split(/\s*-\s*/)[0].trim();
   return normalizePartyKey(head);
 }
 
@@ -87,7 +91,7 @@ function collectPartyKeysInBlocoTitles(segments) {
     const h4re = /<h4[^>]*>([\s\S]*?)<\/h4>/gi;
     let m;
     while ((m = h4re.exec(seg.body)) !== null) {
-      const scopeName = stripTags(m[1]);
+      const scopeName = normalizeDashes(stripTags(m[1]));
       if (classifyScope(scopeName) !== "bloco") continue;
       for (const tok of partyTokensFromBlocoTitle(scopeName)) {
         const k = normalizePartyKey(tok);
@@ -183,7 +187,7 @@ function parseLiderancasHtml(html, sourceUrl) {
     }
 
     for (let i = 0; i < matches.length; i++) {
-      const scopeName = stripTags(matches[i].inner);
+      const scopeName = normalizeDashes(stripTags(matches[i].inner));
       if (!scopeName || scopeName.length < 3) continue;
 
       const start = matches[i].index + matches[i].fullLen;
@@ -253,7 +257,20 @@ function parseLiderancasHtml(html, sourceUrl) {
     }
   }
 
-  return rows;
+  return dropPartidoRowsListedInBlocos(rows, partidosQueEstaoEmBloco);
+}
+
+/**
+ * Rede de segurança: remove linhas scope_type partido cuja sigla está no conjunto dos blocos
+ * (caso algum h4 tenha escapado na etapa anterior).
+ */
+function dropPartidoRowsListedInBlocos(rows, partidosQueEstaoEmBloco) {
+  if (!partidosQueEstaoEmBloco.size) return rows;
+  return rows.filter((r) => {
+    if (r.scope_type !== "partido") return true;
+    const k = partidoHeadKey(r.scope_name);
+    return !partidosQueEstaoEmBloco.has(k);
+  });
 }
 
 module.exports = { parseLiderancasHtml, SOURCE_URL };

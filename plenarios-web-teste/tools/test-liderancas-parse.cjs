@@ -60,4 +60,44 @@ assert.strictEqual(rowsBloco.length, 1, "deve ignorar h4 de partido na seção d
 assert.strictEqual(rowsBloco[0].deputado_id_camara, 880001);
 assert.strictEqual(rowsBloco[0].scope_type, "maioria");
 
-console.log("test-liderancas-parse: OK", rows.length + rowsBloco.length, "linhas (2 cenários)");
+/** PP citado em título de bloco: não importar h4 "PP - …" como partido (líder duplicado). */
+const htmlBlocoExcluiPartidoPorSigla = `
+<body>
+<h3><span>Líderes e Vice-Líderes de blocos e partidos</span></h3>
+<h4>UNIÃO, PP - Bloco Parlamentar UNIÃO, PP</h4>
+<p><strong>Líder:</strong></p>
+<ul><li><a href="https://www.camara.leg.br/deputados/770001">Líder do Bloco</a></li></ul>
+<p><strong>Vice-Líderes:</strong></p>
+<ul><li><a href="https://www.camara.leg.br/deputados/770002">Vice Bloco</a></li></ul>
+<h4>PP - Progressistas</h4>
+<p><strong>Líder:</strong></p>
+<ul><li><a href="https://www.camara.leg.br/deputados/770003">Líder PP no bloco não querido</a></li></ul>
+</body>
+`;
+const rowsSigla = parseLiderancasHtml(htmlBlocoExcluiPartidoPorSigla, SOURCE_URL);
+const idsSigla = new Set(rowsSigla.map((r) => r.deputado_id_camara));
+assert.ok(idsSigla.has(770001), "líder do bloco");
+assert.ok(idsSigla.has(770002), "vice do bloco");
+assert.ok(!idsSigla.has(770003), "líder só do partido PP integrante de bloco deve ser ignorado");
+
+/** Travessão Unicode (U+2013) como na página da Câmara. */
+const htmlTravessao = `
+<body>
+<h3><span>Blocos</span></h3>
+<h4>UNIÃO, PP \u2013 Bloco Parlamentar UNIÃO, PP</h4>
+<p><strong>Líder:</strong></p>
+<ul><li><a href="https://www.camara.leg.br/deputados/660001">Líder Bloco</a></li></ul>
+<h4>PP \u2013 Progressistas</h4>
+<p><strong>Líder:</strong></p>
+<ul><li><a href="https://www.camara.leg.br/deputados/660002">Não deve entrar</a></li></ul>
+</body>
+`;
+const rowsDash = parseLiderancasHtml(htmlTravessao, SOURCE_URL);
+const idsDash = new Set(rowsDash.map((r) => r.deputado_id_camara));
+assert.ok(idsDash.has(660001) && !idsDash.has(660002), "travessão Unicode deve acionar filtro PP");
+
+console.log(
+  "test-liderancas-parse: OK",
+  rows.length + rowsBloco.length + rowsSigla.length + rowsDash.length,
+  "linhas (4 cenários)"
+);
