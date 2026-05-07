@@ -997,7 +997,7 @@ async function main() {
   async function fetchLiderancasSnapshot() {
     if (!SHARED_SYNC_ENABLED) return;
     try {
-      const res = await fetch("/api/liderancas", { headers: { Accept: "application/json" } });
+      const res = await fetch("/api/liderancas?refresh=1", { headers: { Accept: "application/json" } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       liderancasByCamara = buildLiderancasIndex(data.dados || []);
@@ -1190,7 +1190,9 @@ async function main() {
 
   const setCommissionOptions = (type, selectedId) => {
     if (!commissionSelectEl) return;
-    const items = allCommissions.filter((c) => c.type === type);
+    const items = allCommissions
+      .filter((c) => c.type === type)
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }));
     commissionSelectEl.innerHTML = "";
     if (!items.length) {
       const opt = document.createElement("option");
