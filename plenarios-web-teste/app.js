@@ -1051,7 +1051,7 @@ async function main() {
           ? new Date(liderancasApiMeta.lastSuccessAt).toLocaleString("pt-BR")
           : "—";
         const n = Number(liderancasApiMeta?.lastItemCount || 0);
-        liderText = ` • lideranças Câmara: ${n} reg. • última gravação no servidor ${lastDb} • este app atualiza a lista ~10 min • sync oficial seg–sex 8h–19h (Brasília), sem sáb/dom nem feriados nacionais`;
+        liderText = ` • lideranças Câmara: ${n} reg. • última gravação no servidor ${lastDb}`;
       }
     }
     $("#statusText").textContent = `${countAllocated(state)} alocados • ${totalSeats} cadeiras${metaText}${liderText}`;
