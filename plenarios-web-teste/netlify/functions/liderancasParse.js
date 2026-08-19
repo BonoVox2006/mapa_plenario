@@ -109,6 +109,24 @@ function buildScopeLabel(roleType, scopeName) {
   return `${rolePt} — ${short}`;
 }
 
+function pushLeadershipLinks(rows, links, scopeType, scopeName, roleType, sourceUrl) {
+  for (const link of links) {
+    rows.push({
+      row_key: rowKey(scopeType, scopeName, roleType, link.id, link.nome),
+      scope_type: scopeType,
+      scope_name: scopeName,
+      role_type: roleType,
+      deputado_id_camara: link.id,
+      deputado_nome: link.nome,
+      sigla_partido: null,
+      uf: null,
+      scope_label: buildScopeLabel(roleType, scopeName),
+      source_url: sourceUrl,
+      active: true
+    });
+  }
+}
+
 function rowKey(scopeType, scopeName, roleType, deputadoId, deputadoNome) {
   const base = `${scopeType}|${scopeName}|${roleType}|${deputadoId}|${String(deputadoNome).toLowerCase().trim()}`;
   return crypto.createHash("sha256").update(base, "utf8").digest("hex").slice(0, 48);
@@ -117,8 +135,7 @@ function rowKey(scopeType, scopeName, roleType, deputadoId, deputadoNome) {
 function extractLinksFromUl(ulHtml) {
   const out = [];
   if (!ulHtml) return out;
-  const re =
-    /<a[^>]+href="https?:\/\/www\.camara\.leg\.br\/deputados\/(\d+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  const re = /<a[^>]+href="[^"]*deputados\/(?:[^"\/]+\/)?(\d{3,})[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
   let m;
   while ((m = re.exec(ulHtml)) !== null) {
     const id = Number(m[1]);
@@ -129,13 +146,18 @@ function extractLinksFromUl(ulHtml) {
 }
 
 function extractSection(html, strongLabel) {
-  const escaped = strongLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(
-    `<strong>\\s*${escaped}\\s*:<\\/strong>\\s*<ul>([\\s\\S]*?)<\\/ul>`,
-    "i"
-  );
-  const m = html.match(re);
-  return m ? m[1] : "";
+  const labels =
+    strongLabel === "Vice-Líderes" ? ["Vice-Líderes", "Vice-Líder"] : [strongLabel];
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(
+      `<(?:strong|b)[^>]*>\\s*${escaped}\\s*:?\\s*<\\/(?:strong|b)>[\\s\\S]{0,120}?<ul>([\\s\\S]*?)<\\/ul>`,
+      "i"
+    );
+    const m = html.match(re);
+    if (m) return m[1];
+  }
+  return "";
 }
 
 /**
@@ -195,65 +217,19 @@ function parseLiderancasHtml(html, sourceUrl) {
       const blockHtml = seg.body.slice(start, end);
       const scopeType = classifyScope(scopeName);
 
-      if (seg.excludePartyH4 && scopeType === "partido") continue;
-
-      if (
+      const inBlocoParty =
         scopeType === "partido" &&
-        partidosQueEstaoEmBloco.size > 0 &&
-        partidosQueEstaoEmBloco.has(partidoHeadKey(scopeName))
-      ) {
-        continue;
-      }
+        (seg.excludePartyH4 ||
+          (partidosQueEstaoEmBloco.size > 0 && partidosQueEstaoEmBloco.has(partidoHeadKey(scopeName))));
+      const storedScope = inBlocoParty ? "partido_bloco" : scopeType;
 
       const leaders = extractSection(blockHtml, "Líder");
       const vices = extractSection(blockHtml, "Vice-Líderes");
       const reps = extractSection(blockHtml, "Representante");
 
-      for (const link of extractLinksFromUl(leaders)) {
-        rows.push({
-          row_key: rowKey(scopeType, scopeName, "lider", link.id, link.nome),
-          scope_type: scopeType,
-          scope_name: scopeName,
-          role_type: "lider",
-          deputado_id_camara: link.id,
-          deputado_nome: link.nome,
-          sigla_partido: null,
-          uf: null,
-          scope_label: buildScopeLabel("lider", scopeName),
-          source_url: sourceUrl,
-          active: true
-        });
-      }
-      for (const link of extractLinksFromUl(vices)) {
-        rows.push({
-          row_key: rowKey(scopeType, scopeName, "vice_lider", link.id, link.nome),
-          scope_type: scopeType,
-          scope_name: scopeName,
-          role_type: "vice_lider",
-          deputado_id_camara: link.id,
-          deputado_nome: link.nome,
-          sigla_partido: null,
-          uf: null,
-          scope_label: buildScopeLabel("vice_lider", scopeName),
-          source_url: sourceUrl,
-          active: true
-        });
-      }
-      for (const link of extractLinksFromUl(reps)) {
-        rows.push({
-          row_key: rowKey(scopeType, scopeName, "representante", link.id, link.nome),
-          scope_type: scopeType,
-          scope_name: scopeName,
-          role_type: "representante",
-          deputado_id_camara: link.id,
-          deputado_nome: link.nome,
-          sigla_partido: null,
-          uf: null,
-          scope_label: buildScopeLabel("representante", scopeName),
-          source_url: sourceUrl,
-          active: true
-        });
-      }
+      pushLeadershipLinks(rows, extractLinksFromUl(leaders), storedScope, scopeName, "lider", sourceUrl);
+      pushLeadershipLinks(rows, extractLinksFromUl(vices), storedScope, scopeName, "vice_lider", sourceUrl);
+      pushLeadershipLinks(rows, extractLinksFromUl(reps), storedScope, scopeName, "representante", sourceUrl);
     }
   }
 
@@ -264,15 +240,16 @@ function parseLiderancasHtml(html, sourceUrl) {
 }
 
 /**
- * Rede de segurança: remove linhas scope_type partido cuja sigla está no conjunto dos blocos
- * (caso algum h4 tenha escapado na etapa anterior).
+ * Partido que só aparece como membro de bloco: não vira selo L/VL de partido isolado.
+ * Mantém a linha como `partido_bloco` para verificação de votação (Infoleg).
  */
 function dropPartidoRowsListedInBlocos(rows, partidosQueEstaoEmBloco) {
   if (!partidosQueEstaoEmBloco.size) return rows;
-  return rows.filter((r) => {
-    if (r.scope_type !== "partido") return true;
+  return rows.map((r) => {
+    if (r.scope_type !== "partido") return r;
     const k = partidoHeadKey(r.scope_name);
-    return !partidosQueEstaoEmBloco.has(k);
+    if (!partidosQueEstaoEmBloco.has(k)) return r;
+    return { ...r, scope_type: "partido_bloco" };
   });
 }
 
