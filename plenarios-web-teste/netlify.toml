@@ -22,6 +22,11 @@
   to = "/.netlify/functions/liderancas-sync"
   status = 200
 
+[[redirects]]
+  from = "/api/liderancas-bancadas"
+  to = "/.netlify/functions/liderancas-bancadas"
+  status = 200
+
 # Cron Netlify = UTC. Com Brasília em UTC−3, 8h–19h local ≈ 11h–22h UTC (ajuste se o fuso mudar).
 # Seg–sex apenas; fim de semana não agenda. Feriados: tratados na function (Brasil API + America/Sao_Paulo).
 [functions.liderancas-sync]

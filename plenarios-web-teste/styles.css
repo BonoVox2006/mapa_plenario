@@ -627,6 +627,52 @@ select.input optgroup{
 .seat--membro .seat__name{color:#1b2438}
 .seat--membro .seat__meta{color:#3b4560}
 
+.seat--verificacao,
+.seat--intersticio{
+  padding-bottom:8px;
+}
+.seat--verificacao::after,
+.seat--intersticio::after{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  height:5px;
+  pointer-events:none;
+  z-index:4;
+}
+.seat--verificacao::after{background:#c62828}
+.seat--intersticio::after{background:#1565c0}
+.seat--membro.seat--verificacao::after,
+.seat--membro.seat--intersticio::after{
+  border-radius:0 0 16px 16px;
+}
+
+.commissionLegend{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin-top:8px;
+  font-size:11px;
+  color:var(--muted2);
+  line-height:1.35;
+}
+.commissionLegend__row{
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+}
+.commissionLegend__swatch{
+  width:18px;
+  height:8px;
+  border-radius:2px;
+  margin-top:4px;
+  flex:0 0 auto;
+}
+.commissionLegend__swatch--red{background:#d32f2f}
+.commissionLegend__swatch--blue{background:#1565c0}
+
 .dialog{
   border:none;
   border-radius:16px;

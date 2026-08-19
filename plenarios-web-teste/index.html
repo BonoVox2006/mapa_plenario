@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mapa de Plenário — Alocação de Deputados</title>
-    <link rel="stylesheet" href="./styles.css?v=16" />
+    <link rel="stylesheet" href="./styles.css?v=20" />
   </head>
   <body>
     <header class="topbar">
@@ -51,6 +51,16 @@
                 <option value="">Carregando comissões...</option>
               </select>
             </label>
+            <div class="commissionLegend" aria-label="Legenda de lideranças na comissão">
+              <div class="commissionLegend__row">
+                <span class="commissionLegend__swatch commissionLegend__swatch--red"></span>
+                <span>Pode pedir verificação de votação nesta comissão (≥ 6% da bancada)</span>
+              </div>
+              <div class="commissionLegend__row">
+                <span class="commissionLegend__swatch commissionLegend__swatch--blue"></span>
+                <span>Verificação e quebra de interstício (≥ 10% da bancada)</span>
+              </div>
+            </div>
             <label class="field">
               <div class="field__label" style="font-size:14px; color:var(--text); font-weight:800; margin-bottom:4px">Deputados</div>
               <div class="field__label">Buscar</div>
@@ -179,7 +189,8 @@
       </form>
     </dialog>
 
+    <script src="./liderancasSoap.js?v=1"></script>
     <script src="./data-deputados.js?v=1"></script>
-    <script src="./app.js?v=43"></script>
+    <script src="./app.js?v=48"></script>
   </body>
 </html>

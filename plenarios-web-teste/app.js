@@ -135,6 +135,201 @@ function classifyCommissionType(orgao) {
   return null;
 }
 
+/** Sigla de partido/bloco para cruzar membros da comissão com lideranças. */
+function normalizePartyKey(s) {
+  return normalizeFold(s)
+    .replace(/[\u2013\u2014\u2212]/g, "-")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function compactPartyKey(s) {
+  return normalizePartyKey(s).replace(/\s+/g, "");
+}
+
+const FEDERATION_PARTY_KEYS = [
+  { test: /brasil da esperanca|fe brasil|pt pcdob pv|pt-pcdob-pv/, parties: ["pt", "pcdob", "pv"] },
+  { test: /psol.*rede|rede.*psol/, parties: ["psol", "rede"] },
+  { test: /psdb.*cidadania|cidadania.*psdb/, parties: ["psdb", "cidadania"] }
+];
+
+function partiesFromFederationName(scopeName) {
+  const s = normalizePartyKey(scopeName);
+  for (const row of FEDERATION_PARTY_KEYS) {
+    if (row.test.test(s)) return row.parties.slice();
+  }
+  const hyphen = String(scopeName || "").match(/[A-Za-zÀ-ú0-9]{2,}(?:-[A-Za-zÀ-ú0-9]{2,})+/);
+  if (hyphen) return hyphen[0].split("-").map((p) => compactPartyKey(p)).filter(Boolean);
+  return [];
+}
+
+function partidoHeadKey(scopeName) {
+  const flat = String(scopeName || "").replace(/[\u2013\u2014\u2212]/g, "-");
+  const head = flat.split(/\s*-\s*/)[0].trim();
+  return compactPartyKey(head);
+}
+
+function partyTokensFromCompoundTitle(scopeName) {
+  const raw = String(scopeName || "").replace(/[\u2013\u2014\u2212]/g, "-");
+  const m =
+    raw.match(/(.+?)\s*-\s*Bloco\s+Parlamentar\b/i) ||
+    raw.match(/(.+?)\s*-\s*Federa/i);
+  const head = (m ? m[1] : raw).trim();
+  if (!head.includes(",")) return partiesFromFederationName(head);
+  const out = [];
+  for (const part of head.split(",")) {
+    const fed = partiesFromFederationName(part);
+    if (fed.length) out.push(...fed);
+    else {
+      const k = compactPartyKey(part);
+      if (k) out.push(k);
+    }
+  }
+  return out;
+}
+
+function partiesFromLeadershipRow(row) {
+  const type = row?.scope_type || "";
+  if (type === "governo" || type === "oposicao" || type === "maioria" || type === "minoria") {
+    return { special: true, parties: [] };
+  }
+  if (type === "federacao") {
+    const fed = partiesFromFederationName(row.scope_name);
+    if (fed.length) return { special: false, parties: fed };
+  }
+  const tokens = partyTokensFromCompoundTitle(row.scope_name);
+  if (tokens.length) return { special: false, parties: tokens };
+  const head = partidoHeadKey(row.scope_name);
+  return { special: false, parties: head ? [head] : [] };
+}
+
+function buildBlocoPartyRollup(liderancasByCamara) {
+  /** @type {Map<string, string[]>} */
+  const memberToBloco = new Map();
+  if (!(liderancasByCamara instanceof Map)) return memberToBloco;
+  const seen = new Set();
+  for (const rows of liderancasByCamara.values()) {
+    for (const row of rows || []) {
+      if (row.scope_type !== "bloco") continue;
+      const name = row.scope_name || "";
+      if (seen.has(name)) continue;
+      seen.add(name);
+      const parties = partyTokensFromCompoundTitle(name);
+      if (!parties.length) continue;
+      for (const p of parties) memberToBloco.set(p, parties);
+    }
+  }
+  return memberToBloco;
+}
+
+function partiesForVerification(row, blocoRollup) {
+  const parsed = partiesFromLeadershipRow(row);
+  if (parsed.special) return parsed;
+  if (row?.scope_type !== "partido" && row?.scope_type !== "partido_bloco") {
+    return parsed;
+  }
+  const expanded = new Set();
+  for (const p of parsed.parties) {
+    const bloco = blocoRollup.get(p);
+    if (bloco && bloco.length) bloco.forEach((x) => expanded.add(x));
+    else expanded.add(p);
+  }
+  return { special: false, parties: [...expanded] };
+}
+
+function atomicPartyKeyFromSigla(sigla) {
+  const fed = partiesFromFederationName(sigla);
+  if (fed.length === 1) return fed[0];
+  if (fed.length > 1) return "";
+  const k = compactPartyKey(sigla);
+  if (!k) return "";
+  if (k === "pcodob") return "pcdob";
+  return k;
+}
+
+function sumPartySeats(countByParty, parties) {
+  let n = 0;
+  for (const p of parties) n += Number(countByParty.get(p) || 0);
+  return n;
+}
+
+function isCommissionTitularRow(m) {
+  const t = normalizeFold(m?.titulo || "");
+  if (!t || t.includes("suplente")) return false;
+  return t.includes("titular") || t.includes("presidente");
+}
+
+/**
+ * Infoleg: liderança pode pedir verificação se representar ≥6/100 do colegiado
+ * (comissão ou Plenário — QO 338/2013). Quebra de interstício: ≥1/10.
+ * Governo/Oposição/Maioria/Minoria: verificação nas comissões sem quórum de bancada.
+ */
+function computeVerificationByDeputyId(memberFacts, liderancasByCamara, deputies) {
+  /** @type {Map<string, {verify:boolean, interstice:boolean}>} */
+  const out = new Map();
+  if (!Array.isArray(memberFacts) || !memberFacts.length) return out;
+
+  const titularIds = new Set();
+  const countByParty = new Map();
+  for (const f of memberFacts) {
+    if (!f.titular || !f.partyKey) continue;
+    if (titularIds.has(f.depId)) continue;
+    titularIds.add(f.depId);
+    countByParty.set(f.partyKey, (countByParty.get(f.partyKey) || 0) + 1);
+  }
+  const titularCount = titularIds.size || memberFacts.length;
+  const verifyNeed = Math.max(1, Math.ceil(titularCount * 0.06));
+  const intersticeNeed = Math.max(1, Math.ceil(titularCount * 0.1));
+
+  const plenaryByParty = new Map();
+  for (const d of deputies || []) {
+    const k = atomicPartyKeyFromSigla(d.partido);
+    if (!k) continue;
+    plenaryByParty.set(k, (plenaryByParty.get(k) || 0) + 1);
+  }
+  const plenaryTotal = Math.max(deputies?.length || 0, 513);
+  const plenaryVerifyNeed = Math.max(1, Math.ceil(plenaryTotal * 0.06));
+  const plenaryIntersticeNeed = Math.max(1, Math.ceil(plenaryTotal * 0.1));
+
+  const blocoRollup = buildBlocoPartyRollup(liderancasByCamara);
+  const deputiesById = new Map((deputies || []).map((d) => [d.id, d]));
+
+  for (const f of memberFacts) {
+    const dep = deputiesById.get(f.depId) || { id: f.depId, nome: f.nome };
+    let rows = leadershipRowsForDeputy(liderancasByCamara, f.depId, f.camaraId, dep.nome || f.nome);
+    if (!rows.length && (dep.isLider || dep.isViceLider)) {
+      rows = [
+        {
+          scope_type: "partido",
+          scope_name: dep.partido || f.partyKey || "",
+          role_type: dep.isLider ? "lider" : "vice_lider"
+        }
+      ];
+    }
+    if (!rows.length) continue;
+
+    let verify = false;
+    let interstice = false;
+    for (const row of rows) {
+      const parsed = partiesForVerification(row, blocoRollup);
+      if (parsed.special) {
+        verify = true;
+        continue;
+      }
+      const seats = sumPartySeats(countByParty, parsed.parties);
+      const plenarySeats = sumPartySeats(plenaryByParty, parsed.parties);
+      if (seats >= verifyNeed || plenarySeats >= plenaryVerifyNeed) verify = true;
+      if (seats >= intersticeNeed || plenarySeats >= plenaryIntersticeNeed) interstice = true;
+    }
+    if (verify || interstice) {
+      out.set(f.depId, { verify: verify || interstice, interstice });
+    }
+  }
+
+  return out;
+}
+
 function isCommissionActive(orgao) {
   const statusText = normalizeFold(
     `${orgao?.situacao || ""} ${orgao?.status || ""} ${orgao?.nome || ""} ${orgao?.apelido || ""} ${orgao?.nomePublicacao || ""}`
@@ -638,17 +833,29 @@ function renderSeatInspector({ seat, dep, onRemove }) {
   host.appendChild(actions);
 }
 
-/** Papéis na lista oficial (snapshot); `representante` conta como “líder” para o selo L. */
-function snapshotLeadershipRoles(liderancasByCamara, depId) {
-  if (!(liderancasByCamara instanceof Map) || liderancasByCamara.size === 0) {
-    return { isLiderSnapshot: false, isViceSnapshot: false };
+function leadershipRowsForDeputy(liderancasByCamara, depId, camaraId, nome) {
+  if (!(liderancasByCamara instanceof Map) || liderancasByCamara.size === 0) return [];
+  const keys = [camaraId, extractNumericDeputyId(depId), extractNumericDeputyId(camaraId)]
+    .map((k) => (k == null || k === "" ? "" : String(k)))
+    .filter(Boolean);
+  for (const k of keys) {
+    const rows = liderancasByCamara.get(k);
+    if (rows?.length) return rows;
   }
-  const num = extractNumericDeputyId(depId);
-  if (!num) return { isLiderSnapshot: false, isViceSnapshot: false };
-  const rows = liderancasByCamara.get(num) || [];
+  if (nome) {
+    const byName = liderancasByCamara.get(`nome:${normalizeNameKey(nome)}`);
+    if (byName?.length) return byName;
+  }
+  return [];
+}
+
+function snapshotLeadershipRoles(liderancasByCamara, depId, camaraId, nome) {
+  const rows = leadershipRowsForDeputy(liderancasByCamara, depId, camaraId, nome);
+  if (!rows.length) return { isLiderSnapshot: false, isViceSnapshot: false };
   let isLiderSnapshot = false;
   let isViceSnapshot = false;
   for (const row of rows) {
+    if (row.scope_type === "partido_bloco") continue;
     const rt = row.role_type;
     if (rt === "lider" || rt === "representante") isLiderSnapshot = true;
     if (rt === "vice_lider") isViceSnapshot = true;
@@ -656,27 +863,44 @@ function snapshotLeadershipRoles(liderancasByCamara, depId) {
   return { isLiderSnapshot, isViceSnapshot };
 }
 
-function appendSeatLeadershipBadges(seatEl, depId, liderancasByCamara) {
-  const { isLiderSnapshot, isViceSnapshot } = snapshotLeadershipRoles(liderancasByCamara, depId);
-  if (!isLiderSnapshot && !isViceSnapshot) return;
-  const wrap = document.createElement("div");
-  wrap.className = "seatLeadershipBadges";
-  wrap.setAttribute("aria-hidden", "true");
-  if (isLiderSnapshot) {
-    const b = document.createElement("span");
-    b.className = "seatLeadershipBadge seatLeadershipBadge--l";
-    b.textContent = "L";
-    b.title = "Líder (lista oficial da Câmara)";
-    wrap.appendChild(b);
+function appendSeatLeadershipBadges(seatEl, dep, liderancasByCamara, verificationByDeputyId, camaraIdByDeputyId) {
+  const depId = dep?.id;
+  if (!depId) return;
+  const camaraId = camaraIdByDeputyId instanceof Map ? camaraIdByDeputyId.get(depId) : null;
+  const { isLiderSnapshot, isViceSnapshot } = snapshotLeadershipRoles(
+    liderancasByCamara,
+    depId,
+    camaraId,
+    dep.nome
+  );
+  if (isLiderSnapshot || isViceSnapshot) {
+    const wrap = document.createElement("div");
+    wrap.className = "seatLeadershipBadges";
+    wrap.setAttribute("aria-hidden", "true");
+    if (isLiderSnapshot) {
+      const b = document.createElement("span");
+      b.className = "seatLeadershipBadge seatLeadershipBadge--l";
+      b.textContent = "L";
+      b.title = "Líder (lista oficial da Câmara)";
+      wrap.appendChild(b);
+    }
+    if (isViceSnapshot) {
+      const b = document.createElement("span");
+      b.className = "seatLeadershipBadge seatLeadershipBadge--vl";
+      b.textContent = "VL";
+      b.title = "Vice-líder (lista oficial da Câmara)";
+      wrap.appendChild(b);
+    }
+    seatEl.appendChild(wrap);
   }
-  if (isViceSnapshot) {
-    const b = document.createElement("span");
-    b.className = "seatLeadershipBadge seatLeadershipBadge--vl";
-    b.textContent = "VL";
-    b.title = "Vice-líder (lista oficial da Câmara)";
-    wrap.appendChild(b);
+  const priv = verificationByDeputyId instanceof Map ? verificationByDeputyId.get(depId) : null;
+  if (priv?.interstice) {
+    seatEl.classList.add("seat--intersticio");
+    seatEl.title = (seatEl.title ? `${seatEl.title} — ` : "") + "Pode pedir verificação e quebra de interstício nesta comissão";
+  } else if (priv?.verify) {
+    seatEl.classList.add("seat--verificacao");
+    seatEl.title = (seatEl.title ? `${seatEl.title} — ` : "") + "Pode pedir verificação de votação nesta comissão";
   }
-  seatEl.appendChild(wrap);
 }
 
 function renderGrid(
@@ -686,7 +910,9 @@ function renderGrid(
   activeSeatKey,
   onSeatClick,
   memberDeputyIds,
-  liderancasByCamara
+  liderancasByCamara,
+  verificationByDeputyId,
+  camaraIdByDeputyId
 ) {
   const grid = $("#seatGrid");
   grid.style.gridTemplateColumns = `repeat(${layout.columns}, var(--cellW))`;
@@ -739,7 +965,7 @@ function renderGrid(
       content.appendChild(main);
 
       el.appendChild(content);
-      if (depId) appendSeatLeadershipBadges(el, depId, liderancasByCamara);
+      if (dep) appendSeatLeadershipBadges(el, dep, liderancasByCamara, verificationByDeputyId, camaraIdByDeputyId);
       grid.appendChild(el);
     }
   }
@@ -758,7 +984,9 @@ function renderPresidentArea(
   activeSeatKey,
   onSeatClick,
   memberDeputyIds,
-  liderancasByCamara
+  liderancasByCamara,
+  verificationByDeputyId,
+  camaraIdByDeputyId
 ) {
   const host = $("#presidentArea");
   if (!host) return;
@@ -811,7 +1039,7 @@ function renderPresidentArea(
     content.appendChild(main);
     box.appendChild(content);
 
-    if (depId) appendSeatLeadershipBadges(box, depId, liderancasByCamara);
+    if (dep) appendSeatLeadershipBadges(box, dep, liderancasByCamara, verificationByDeputyId, camaraIdByDeputyId);
 
     if (seat && key) {
       box.addEventListener("click", () => onSeatClick(seat, key));
@@ -970,6 +1198,12 @@ async function main() {
   let activeSeat = null;
   const memberDeputyIds = new Set();
   const memberRoleByDeputyId = new Map();
+  /** @type {{depId:string, camaraId:string, nome?:string, partyKey:string, titular:boolean}[]} */
+  let commissionMemberFacts = [];
+  /** @type {Map<string, {verify:boolean, interstice:boolean}>} */
+  let verificationByDeputyId = new Map();
+  /** @type {Map<string, string>} */
+  const memberCamaraIdByDeputyId = new Map();
 
   const tabsRoot = document.getElementById("layoutTabs");
   const currentPlenarioText = $("#currentPlenarioText");
@@ -985,27 +1219,62 @@ async function main() {
 
   function buildLiderancasIndex(rows) {
     const m = new Map();
+    const add = (key, row) => {
+      if (!key) return;
+      const k = String(key);
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(row);
+    };
     for (const row of rows || []) {
       const id = row?.deputado_id_camara != null ? String(row.deputado_id_camara) : "";
-      if (!id) continue;
-      if (!m.has(id)) m.set(id, []);
-      m.get(id).push(row);
+      add(id, row);
+      const nomeKey = row?.deputado_nome ? normalizeNameKey(row.deputado_nome) : "";
+      if (nomeKey) add(`nome:${nomeKey}`, row);
     }
     return m;
   }
 
   async function fetchLiderancasSnapshot() {
-    if (!SHARED_SYNC_ENABLED) return;
-    try {
-      const res = await fetch("/api/liderancas?refresh=1", { headers: { Accept: "application/json" } });
+    const tryJson = async (url) => {
+      const res = await fetch(url, { headers: { Accept: "application/json,application/xml,text/xml,*/*" } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const ct = res.headers.get("content-type") || "";
+      if (ct.includes("xml") || url.includes("ObterLideresBancadas")) {
+        const xml = await res.text();
+        if (typeof parseLiderancasSoapXml !== "function") throw new Error("parser SOAP ausente");
+        return parseLiderancasSoapXml(xml);
+      }
       const data = await res.json();
-      liderancasByCamara = buildLiderancasIndex(data.dados || []);
-      liderancasApiMeta = data.meta || null;
-      liderancasFetchError = null;
-    } catch (e) {
-      liderancasFetchError = String(e?.message || e);
+      if (Array.isArray(data?.dados)) return data.dados;
+      if (Array.isArray(data)) return data;
+      throw new Error("JSON sem dados");
+    };
+
+    const urls = [
+      "/api/liderancas-bancadas",
+      "https://www.camara.leg.br/SitCamaraWS/Deputados.asmx/ObterLideresBancadas",
+      "/api/liderancas?refresh=1"
+    ];
+    if (SHARED_SYNC_ENABLED && !/mapaplenario\.netlify\.app$/i.test(location.hostname)) {
+      urls.push("https://mapaplenario.netlify.app/api/liderancas-bancadas");
+      urls.push("https://mapaplenario.netlify.app/api/liderancas?refresh=1");
     }
+
+    let lastErr = null;
+    for (const url of urls) {
+      try {
+        const rows = await tryJson(url);
+        if (!rows.length) continue;
+        liderancasByCamara = buildLiderancasIndex(rows);
+        liderancasApiMeta = { lastItemCount: rows.length, lastSuccessAt: new Date().toISOString() };
+        liderancasFetchError = null;
+        refreshVerificationMarks();
+        return;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    liderancasFetchError = String(lastErr?.message || lastErr || "lideranças indisponíveis");
   }
 
   const setPanelCollapsed = (collapsed) => {
@@ -1138,7 +1407,9 @@ async function main() {
       activeSeatKey,
       handleSeatClick,
       memberDeputyIds,
-      liderancasByCamara
+      liderancasByCamara,
+      verificationByDeputyId,
+      memberCamaraIdByDeputyId
     );
     renderPresidentArea(
       currentLayout,
@@ -1147,7 +1418,9 @@ async function main() {
       activeSeatKey,
       handleSeatClick,
       memberDeputyIds,
-      liderancasByCamara
+      liderancasByCamara,
+      verificationByDeputyId,
+      memberCamaraIdByDeputyId
     );
     updateStatus();
   };
@@ -1166,8 +1439,13 @@ async function main() {
       (dep) => setSelectedDeputy(dep),
       (dep) => {
         const role = memberRoleByDeputyId.get(dep.id);
-        if (!role) return "Não membro";
-        return `Membro (${role.label})`;
+        const priv = verificationByDeputyId.get(dep.id);
+        const bits = [];
+        if (role) bits.push(role.label);
+        else bits.push("Não membro");
+        if (priv?.interstice) bits.push("verificação + interstício");
+        else if (priv?.verify) bits.push("pode pedir verificação");
+        return bits.join(" • ");
       }
     );
   };
@@ -1215,8 +1493,19 @@ async function main() {
   const clearMemberMarks = () => {
     memberDeputyIds.clear();
     memberRoleByDeputyId.clear();
+    commissionMemberFacts = [];
+    verificationByDeputyId = new Map();
+    memberCamaraIdByDeputyId.clear();
     rerenderGrid();
     rerenderDeputyList();
+  };
+
+  const refreshVerificationMarks = () => {
+    verificationByDeputyId = computeVerificationByDeputyId(
+      commissionMemberFacts,
+      liderancasByCamara,
+      deputies
+    );
   };
 
   const getMemberRoleFromRow = (m) => {
@@ -1288,6 +1577,9 @@ async function main() {
     try {
       memberDeputyIds.clear();
       memberRoleByDeputyId.clear();
+      commissionMemberFacts = [];
+      verificationByDeputyId = new Map();
+      memberCamaraIdByDeputyId.clear();
 
       const perPage = 100;
       let page = 1;
@@ -1307,6 +1599,7 @@ async function main() {
         page += 1;
       }
 
+      const seenFacts = new Set();
       for (const m of allRows) {
         const depId = resolveMemberToDeputyId(m);
         if (!depId) continue;
@@ -1316,7 +1609,21 @@ async function main() {
         if (!currentRole || nextRole.rank > currentRole.rank) {
           memberRoleByDeputyId.set(depId, nextRole);
         }
+        const camaraId = m?.id != null && m.id !== "" ? String(m.id).trim() : "";
+        if (camaraId) memberCamaraIdByDeputyId.set(depId, camaraId);
+        const partyKey = atomicPartyKeyFromSigla(m.siglaPartido || deputiesById.get(depId)?.partido || "");
+        const factKey = `${depId}|${partyKey}|${isCommissionTitularRow(m) ? "1" : "0"}`;
+        if (seenFacts.has(factKey)) continue;
+        seenFacts.add(factKey);
+        commissionMemberFacts.push({
+          depId,
+          camaraId,
+          nome: m.nome || deputiesById.get(depId)?.nome,
+          partyKey,
+          titular: isCommissionTitularRow(m)
+        });
       }
+      refreshVerificationMarks();
       rerenderGrid();
       rerenderDeputyList();
     } catch {
@@ -1605,12 +1912,20 @@ async function main() {
 
   setActiveLayoutById("1");
 
-  if (SHARED_SYNC_ENABLED) {
-    void fetchLiderancasSnapshot().then(() => rerenderGrid());
-    setInterval(() => {
-      void fetchLiderancasSnapshot().then(() => rerenderGrid());
-    }, 10 * 60 * 1000);
+  void fetchLiderancasSnapshot().then(() => {
+    refreshVerificationMarks();
+    rerenderGrid();
+    rerenderDeputyList();
+  });
+  setInterval(() => {
+    void fetchLiderancasSnapshot().then(() => {
+      refreshVerificationMarks();
+      rerenderGrid();
+      rerenderDeputyList();
+    });
+  }, 10 * 60 * 1000);
 
+  if (SHARED_SYNC_ENABLED) {
     setInterval(() => {
       if (!IS_LINUX_CLIENT && document.hidden) return;
       void syncCurrentLayoutFromServer();

@@ -56,9 +56,11 @@ const htmlExcluiPartidoNoBloco = `
 </body>
 `;
 const rowsBloco = parseLiderancasHtml(htmlExcluiPartidoNoBloco, SOURCE_URL);
-assert.strictEqual(rowsBloco.length, 1, "deve ignorar h4 de partido na seção de bloco parlamentar");
-assert.strictEqual(rowsBloco[0].deputado_id_camara, 880001);
-assert.strictEqual(rowsBloco[0].scope_type, "maioria");
+assert.strictEqual(rowsBloco.filter((r) => r.scope_type === "maioria").length, 1);
+assert.strictEqual(rowsBloco.find((r) => r.deputado_id_camara === 880001).scope_type, "maioria");
+const partidoNoBloco = rowsBloco.find((r) => r.deputado_id_camara === 880002);
+assert.ok(partidoNoBloco, "líder do partido no bloco entra para verificação");
+assert.strictEqual(partidoNoBloco.scope_type, "partido_bloco");
 
 /** PP citado em título de bloco: não importar h4 "PP - …" como partido (líder duplicado). */
 const htmlBlocoExcluiPartidoPorSigla = `
@@ -78,7 +80,9 @@ const rowsSigla = parseLiderancasHtml(htmlBlocoExcluiPartidoPorSigla, SOURCE_URL
 const idsSigla = new Set(rowsSigla.map((r) => r.deputado_id_camara));
 assert.ok(idsSigla.has(770001), "líder do bloco");
 assert.ok(idsSigla.has(770002), "vice do bloco");
-assert.ok(!idsSigla.has(770003), "líder só do partido PP integrante de bloco deve ser ignorado");
+const liderPpBloco = rowsSigla.find((r) => r.deputado_id_camara === 770003);
+assert.ok(liderPpBloco, "líder do PP no bloco fica disponível para verificação");
+assert.strictEqual(liderPpBloco.scope_type, "partido_bloco");
 
 /** Travessão Unicode (U+2013) como na página da Câmara. */
 const htmlTravessao = `
@@ -94,7 +98,8 @@ const htmlTravessao = `
 `;
 const rowsDash = parseLiderancasHtml(htmlTravessao, SOURCE_URL);
 const idsDash = new Set(rowsDash.map((r) => r.deputado_id_camara));
-assert.ok(idsDash.has(660001) && !idsDash.has(660002), "travessão Unicode deve acionar filtro PP");
+assert.ok(idsDash.has(660001), "líder do bloco");
+assert.strictEqual(rowsDash.find((r) => r.deputado_id_camara === 660002)?.scope_type, "partido_bloco");
 
 /** Mesmo deputado: vice no bloco + líder de partido que não está no título do bloco → cai só o líder partido. */
 const htmlMesmoDepBlocoEPartido = `
