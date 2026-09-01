@@ -171,28 +171,17 @@ function partidoHeadKey(scopeName) {
 }
 
 function partyTokensFromCompoundTitle(scopeName) {
-  const raw = String(scopeName || "").replace(/[\u2013\u2014\u2212]/g, "-");
-  const m =
-    raw.match(/(.+?)\s*-\s*Bloco\s+Parlamentar\b/i) ||
-    raw.match(/(.+?)\s*-\s*Federa/i);
-  const head = (m ? m[1] : raw).trim();
-  if (!head.includes(",")) return partiesFromFederationName(head);
-  const out = [];
-  for (const part of head.split(",")) {
-    const fed = partiesFromFederationName(part);
-    if (fed.length) out.push(...fed);
-    else {
-      const k = compactPartyKey(part);
-      if (k) out.push(k);
-    }
-  }
-  return out;
+  return partyTokensFromScopeList(scopeName);
 }
 
 function partiesFromLeadershipRow(row) {
   const type = row?.scope_type || "";
   if (type === "governo" || type === "oposicao" || type === "maioria" || type === "minoria") {
     return { special: true, parties: [] };
+  }
+  if (type === "bloco" || type === "federacao") {
+    const tokens = partyTokensFromScopeList(row?.scope_sigla || row?.scope_name);
+    if (tokens.length) return { special: false, parties: tokens };
   }
   const fromSigla = atomicPartyKeyFromSigla(row?.sigla_partido);
   if (fromSigla) return { special: false, parties: [fromSigla] };
@@ -246,12 +235,44 @@ function partiesForVerification(row, blocoRollup) {
 
 function atomicPartyKeyFromSigla(sigla) {
   const fed = partiesFromFederationName(sigla);
-  if (fed.length === 1) return fed[0];
+  if (fed.length === 1) return canonicalPartyKey(fed[0]);
   if (fed.length > 1) return "";
   const k = compactPartyKey(sigla);
   if (!k) return "";
   if (k === "pcodob") return "pcdob";
+  return canonicalPartyKey(k);
+}
+
+function canonicalPartyKey(k) {
+  if (!k) return "";
+  if (k === "republic") return "republicanos";
+  if (k === "solidari") return "solidariedade";
   return k;
+}
+
+function partyTokensFromScopeList(scopeList) {
+  let raw = String(scopeList || "")
+    .replace(/[\u2013\u2014\u2212]/g, "-")
+    .trim();
+  raw = raw.replace(/^bloco\s+parlamentar\s+/i, "").trim();
+  const blocoPrefix = raw.match(/(.+?)\s*-\s*Bloco\s+Parlamentar\b/i);
+  if (blocoPrefix) raw = blocoPrefix[1].trim();
+  if (!raw.includes(",")) {
+    const fed = partiesFromFederationName(raw);
+    if (fed.length) return fed.map(canonicalPartyKey);
+    const k = atomicPartyKeyFromSigla(raw);
+    return k ? [k] : [];
+  }
+  const out = [];
+  for (const part of raw.split(",")) {
+    const fed = partiesFromFederationName(part);
+    if (fed.length) out.push(...fed.map(canonicalPartyKey));
+    else {
+      const k = atomicPartyKeyFromSigla(part.trim());
+      if (k) out.push(k);
+    }
+  }
+  return out;
 }
 
 function sumPartySeats(countByParty, parties) {

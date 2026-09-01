@@ -54,13 +54,14 @@
       .replace(/[^a-z0-9]+/g, "");
   }
 
-  function pushRole(rows, scopeType, scopeName, roleType, block) {
+  function pushRole(rows, scopeType, scopeName, scopeSigla, roleType, block) {
     const id = Number(xmlField(block, "ideCadastro"));
     const nome = xmlField(block, "nome");
     if (!id || !nome) return;
     rows.push({
       scope_type: scopeType,
       scope_name: scopeName,
+      scope_sigla: scopeSigla || null,
       role_type: roleType,
       deputado_id_camara: id,
       deputado_nome: nome,
@@ -99,11 +100,11 @@
         scopeType = "partido_bloco";
       }
       const lider = b.body.match(/<lider\b[^>]*>([\s\S]*?)<\/lider>/i);
-      if (lider) pushRole(rows, scopeType, scopeName, "lider", lider[1]);
+      if (lider) pushRole(rows, scopeType, scopeName, sigla, "lider", lider[1]);
       const viceRe = /<vice_lider\b[^>]*>([\s\S]*?)<\/vice_lider>/gi;
       let v;
       while ((v = viceRe.exec(b.body)) !== null) {
-        pushRole(rows, scopeType, scopeName, "vice_lider", v[1]);
+        pushRole(rows, scopeType, scopeName, sigla, "vice_lider", v[1]);
       }
     }
     return rows;
