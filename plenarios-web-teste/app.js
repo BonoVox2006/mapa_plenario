@@ -1550,23 +1550,49 @@ async function main() {
   };
 
   const resolveMemberToDeputyId = (m) => {
-    // Na API, em /orgaos/{id}/membros o campo `id` costuma ser o id numérico do deputado.
-    if (m?.id != null && m.id !== "") {
-      const key = String(m.id).trim();
-      const byId = deputyIdByNumeric.get(key);
+    const camaraKey =
+      m?.id != null && m.id !== ""
+        ? String(m.id).trim()
+        : extractNumericFromAny(m?.uri || m?.uriDeputado || m?.uriMembro || m?.uriPessoa);
+    if (camaraKey) {
+      const byId = deputyIdByNumeric.get(camaraKey);
       if (byId) return byId;
-    }
-    const fromUri = extractNumericFromAny(m?.uri || m?.uriDeputado || m?.uriMembro || m?.uriPessoa);
-    if (fromUri) {
-      const byUri = deputyIdByNumeric.get(fromUri);
-      if (byUri) return byUri;
     }
     const nameCandidates = [m?.nome, m?.nomeParlamentar, m?.nomeCivil];
     for (const n of nameCandidates) {
       const byName = findDeputyIdByNameFuzzy(n);
-      if (byName) return byName;
+      if (byName) {
+        if (camaraKey) deputyIdByNumeric.set(camaraKey, byName);
+        return byName;
+      }
     }
     return null;
+  };
+
+  const fetchCommissionMembersSoap = async (commissionId) => {
+    if (typeof parseOrgaoMembrosSoapXml !== "function") return [];
+    const url =
+      typeof orgaoMembrosSoapUrl === "function"
+        ? orgaoMembrosSoapUrl(commissionId)
+        : `https://www.camara.leg.br/SitCamaraWS/Orgaos.asmx/ObterMembrosOrgao?IDOrgao=${encodeURIComponent(commissionId)}`;
+    try {
+      const res = await fetch(url, { headers: { Accept: "application/xml,text/xml,*/*" } });
+      if (!res.ok) return [];
+      return parseOrgaoMembrosSoapXml(await res.text());
+    } catch {
+      return [];
+    }
+  };
+
+  const mergeCommissionMemberRows = (restRows, soapRows) => {
+    const byCamaraId = new Map();
+    for (const m of restRows || []) {
+      if (m?.id != null && m.id !== "") byCamaraId.set(String(m.id), m);
+    }
+    for (const m of soapRows || []) {
+      if (m?.id != null && m.id !== "") byCamaraId.set(String(m.id), m);
+    }
+    return [...byCamaraId.values()];
   };
 
   const loadCommissionMembers = async (commissionId) => {
@@ -1599,8 +1625,11 @@ async function main() {
         page += 1;
       }
 
+      const soapRows = await fetchCommissionMembersSoap(commissionId);
+      const mergedRows = mergeCommissionMemberRows(allRows, soapRows);
+
       const seenFacts = new Set();
-      for (const m of allRows) {
+      for (const m of mergedRows) {
         const depId = resolveMemberToDeputyId(m);
         if (!depId) continue;
         memberDeputyIds.add(depId);
