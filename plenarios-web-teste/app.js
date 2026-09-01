@@ -194,9 +194,15 @@ function partiesFromLeadershipRow(row) {
   if (type === "governo" || type === "oposicao" || type === "maioria" || type === "minoria") {
     return { special: true, parties: [] };
   }
+  const fromSigla = atomicPartyKeyFromSigla(row?.sigla_partido);
+  if (fromSigla) return { special: false, parties: [fromSigla] };
   if (type === "federacao") {
     const fed = partiesFromFederationName(row.scope_name);
     if (fed.length) return { special: false, parties: fed };
+  }
+  const scopeSigla = atomicPartyKeyFromSigla(row?.scope_name);
+  if (scopeSigla && String(row?.scope_name || "").length <= 16) {
+    return { special: false, parties: [scopeSigla] };
   }
   const tokens = partyTokensFromCompoundTitle(row.scope_name);
   if (tokens.length) return { special: false, parties: tokens };
